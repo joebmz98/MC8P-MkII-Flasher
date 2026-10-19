@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MC8P HID firmware flasher</title>
+<style>
+:root{
+  color-scheme: light dark;
+  --bg:#e9e7e1; --card:#f6f5f1; --ink:#1b1e22; --mute:#5b6168; --line:#c7c4ba;
+  --accent:#1f4fd8; --on-accent:#fff; --ok:#1d7a46; --err:#b3261e;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#15171a; --card:#1d2024; --ink:#e8e7e2; --mute:#9aa0a8; --line:#33373d;
+         --accent:#7c9cff; --on-accent:#10131a; --ok:#5ac286; --err:#ff8a80; }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:16px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:640px;margin:0 auto;padding:48px 20px 64px}
+h1{font-size:2rem;line-height:1.15;margin:0 0 8px;letter-spacing:-.02em}
+.lede{margin:0 0 28px;color:var(--mute)}
+#status{margin:0 0 28px;min-height:1.6em;font-weight:600}
+#status.ok{color:var(--ok)} #status.err{color:var(--err)}
+ol{padding-left:1.3em;margin:0 0 24px} li{margin:0 0 10px}
+.row{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 20px}
+button{font:inherit;font-weight:600;padding:10px 18px;border-radius:8px;cursor:pointer;
+  border:2px solid var(--ink);background:transparent;color:var(--ink)}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.fw{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px 16px;margin:0 0 20px}
+.fw label{display:block;margin:4px 0}
+.fw small{color:var(--mute)}
+pre{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px;
+  max-height:320px;overflow:auto;font:13px/1.5 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;margin:0}
+.warn{background:var(--card);border-left:4px solid var(--err);padding:10px 14px;margin:0 0 20px;display:none}
+</style>
+</head>
+<body>
+<main>
+  <h1>MC8P HID firmware flasher</h1>
+  <p class="lede">Update the black pill inside your MC8P over USB using the WeAct HID bootloader.</p>
+
+  <p id="status" role="status">Ready.</p>
+  <p class="warn" id="unsupported">This browser can't access USB HID devices. Use Chrome, Edge or another Chromium-based browser on a desktop.</p>
+
+  <ol>
+    <li><strong>Enter HID bootloader mode.</strong> Hold BOOT0, tap NRST, then release BOOT0. You can also hold BOOT0 while plugging in USB.</li>
+    <li><strong>Connect.</strong> Select the <code>STM32 HID Bootloader</code> (VID 0483, PID 572A) in the browser's device list.</li>
+    <li><strong>Flash.</strong> The board restarts into the new firmware when it finishes.</li>
+    <li><strong>Reset if needed.</strong> If the OLED stays dark after flashing, tap NRST once. Wait ~10&nbsp;s for the boot screen.</li>
+  </ol>
+
+  <div class="fw">
+    <label><input type="radio" name="src" value="hosted" checked> Latest release</label>
+    <label><input type="radio" name="src" value="file"> My own .hex or .bin file
+      <input type="file" id="file" accept=".hex,.bin"></label>
+  </div>
+
+  <div class="fw">
+    <label>Bootloader app offset
+      <select id="offset">
+        <option value="16384" selected>16&nbsp;KB (0x4000) — WeAct HID bootloader</option>
+        <option value="0">Unknown / don't check</option>
+      </select></label>
+    <small>Must match the bootloader currently flashed on the chip. The WeAct HID bootloader reserves 16&nbsp;KB, so the app starts at 0x08004000. Rebuild your sketch with <code>-DVECT_TAB_OFFSET=0x4000</code>.</small>
+  </div>
+
+  <div class="row">
+    <button id="connect" class="primary">Connect</button>
+    <button id="flash" disabled>Flash firmware</button>
+  </div>
+
+  <pre id="log" aria-live="polite"></pre>
+</main>
+
+<script type="module">
+const WEACT_VID = 0x0483;
+const WEACT_PID = 0x572A;
+const FLASH_BASE = 0x08000000;
+const HID_TX_SIZE = 64;          // data bytes per HID report (report ID 0 + 64 bytes)
+const SECTOR_SIZE = 1024;        // the bootloader ACKs after each 1024-byte page
+const CMD_RESET_PAGES = new Uint8Array([...new TextEncoder().encode("BTLDCMD"), 0x00]);
+const CMD_REBOOT_MCU  = new Uint8Array([...new TextEncoder().encode("BTLDCMD"), 0x01]);
+
+const $ = id => document.getElementById(id);
+const logEl = $("log"), statusEl = $("status");
+const log = m => { logEl.textContent += m + "\n"; logEl.scrollTop = logEl.scrollHeight; };
+const setStatus = (m, cls = "") => { statusEl.textContent = m; statusEl.className = cls; };
+
+let hidDevice = null;
+
+/* ---------- Intel HEX parser (records 00,01,02,04) ---------- */
+function parseIntelHex(text) {
+  const lines = text.split(/\r?\n/);
+  const chunks = [];
+  let baseAddr = 0;
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line || line[0] !== ':' || line.length < 11) continue;
+    const bytes = [];
+    for (let i = 1; i + 1 < line.length; i += 2) {
+      const b = parseInt(line.slice(i, i + 2), 16);
+      if (Number.isNaN(b)) throw new Error("Bad hex byte: " + line.slice(i, i + 2));
+      bytes.push(b);
+    }
+    const len = bytes[0];
+    const addr = (bytes[1] << 8) | bytes[2];
+    const type = bytes[3];
+    const data = bytes.slice(4, 4 + len);
+    if (type === 0x00) {
+      chunks.push({ addr: baseAddr + addr, data });
+    } else if (type === 0x01) {
+      break;
+    } else if (type === 0x02) {
+      if (data.length >= 2) baseAddr = ((data[0] << 8) | data[1]) << 4;
+    } else if (type === 0x04) {
+      if (data.length >= 2) baseAddr = ((data[0] << 8) | data[1]) << 16;
+    }
+  }
+  if (chunks.length === 0) throw new Error("HEX file has no data records");
+  const startAddr = Math.min(...chunks.map(c => c.addr));
+  const endAddr   = Math.max(...chunks.map(c => c.addr + c.data.length));
+  const buf = new Uint8Array(endAddr - startAddr).fill(0xFF);
+  let covered = 0;
+  for (const c of chunks) {
+    buf.set(c.data, c.addr - startAddr);
+    covered += c.data.length;
+  }
+  return {
+    startAddr, endAddr,
+    buffer: buf, size: buf.length,
+    covered, holes: (endAddr - startAddr) - covered
+  };
+}
+
+async function sha256Hex(buf) {
+  if (!(globalThis.crypto && crypto.subtle && crypto.subtle.digest)) return null;
+  const h = await crypto.subtle.digest("SHA-256", buf);
+  return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+/* ---------- HID helpers ---------- */
+async function sendCommand(commandBytes) {
+  const data = new Uint8Array(HID_TX_SIZE);
+  data.set(commandBytes, 0); // command is 8 bytes, rest stays zero
+  await hidDevice.sendReport(0, data);
+}
+
+async function sendDataChunk(chunk) {
+  const data = new Uint8Array(HID_TX_SIZE);
+  data.set(chunk, 0); // chunk is ≤ 64 bytes; pad with zeros
+  await hidDevice.sendReport(0, data);
+}
+
+let rawReportLogged = false;
+
+function waitForAck(timeoutMs = 3000) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error("Timeout waiting for sector ACK"));
+    }, timeoutMs);
+
+    const handler = (event) => {
+      const len = event.data.byteLength;
+      if (len < 7) return;
+
+      // Log the first input report we ever see, so you can inspect the
+      // exact bootloader response format if ACKs still don't work.
+      if (!rawReportLogged) {
+        const bytes = [];
+        for (let i = 0; i < len; i++) {
+          bytes.push(event.data.getUint8(i).toString(16).padStart(2, "0"));
+        }
+        log("RAW IN (" + len + "): " + bytes.join(" "));
+        rawReportLogged = true;
+      }
+
+      // WeAct replies with "WeAct:" (6 bytes) followed by the status byte
+      // at index 6. The status is 0x02 or 0x03; mask with 0xFE to match both.
+      if ((event.data.getUint8(6) & 0xFE) === 0x02) {
+        cleanup();
+        resolve();
+        return;
+      }
+
+      // Fallback: scan the first 8 bytes in case a different WeAct
+      // bootloader version puts the status byte elsewhere.
+      for (let i = 0; i < Math.min(len, 8); i++) {
+        if ((event.data.getUint8(i) & 0xFE) === 0x02) {
+          cleanup();
+          resolve();
+          return;
+        }
+      }
+    };
+
+    const cleanup = () => {
+      clearTimeout(timer);
+      hidDevice.removeEventListener("inputreport", handler);
+    };
+
+    hidDevice.addEventListener("inputreport", handler);
+  });
+}
+
+/* ---------- Connect ---------- */
+async function connect() {
+  try {
+    const devices = await navigator.hid.requestDevice({
+      filters: [{ vendorId: WEACT_VID, productId: WEACT_PID }]
+    });
+    if (!devices || devices.length === 0) {
+      setStatus("No device selected.");
+      return;
+    }
+    hidDevice = devices[0];
+    await hidDevice.open();
+
+    log("Connected to WeAct HID bootloader.");
+    log("Device: " + (hidDevice.productName || "STM32 HID Bootloader"));
+    setStatus("Connected. Ready to flash.", "ok");
+    $("flash").disabled = false;
+  } catch (e) {
+    if (e.name === "NotFoundError") { setStatus("No device selected."); return; }
+    setStatus("Couldn't connect: " + e.message, "err");
+    log(String(e));
+  }
+}
+
+/* ---------- Flash ---------- */
+async function flash() {
+  if (!hidDevice) {
+    setStatus("Connect to the bootloader first.", "err");
+    return;
+  }
+
+  $("flash").disabled = true; $("connect").disabled = true;
+  rawReportLogged = false;
+
+  try {
+    let firmwareBuffer;
+    let firmwareStart = null;
+    let sourceLabel;
+
+    if (document.querySelector('input[name=src]:checked').value === "file") {
+      const f = $("file").files[0];
+      if (!f) throw new Error("Choose a .hex or .bin file first.");
+      if (f.name.toLowerCase().endsWith(".hex")) {
+        const parsed = parseIntelHex(await f.text());
+        firmwareBuffer = parsed.buffer.buffer;
+        firmwareStart = parsed.startAddr;
+        sourceLabel = "local HEX: " + f.name;
+        log("Parsed HEX: " + parsed.size + " bytes, start 0x" + parsed.startAddr.toString(16) +
+            ", end 0x" + parsed.endAddr.toString(16) + ", gaps " + parsed.holes + " bytes");
+      } else {
+        firmwareBuffer = await f.arrayBuffer();
+        sourceLabel = "local BIN: " + f.name;
+      }
+    } else {
+      const HOSTED_FIRMWARE = "firmware/mc8p.bin";
+      const r = await fetch(HOSTED_FIRMWARE + "?t=" + Date.now(), { cache: "no-store" });
+      if (!r.ok) throw new Error("Couldn't download " + HOSTED_FIRMWARE + " (" + r.status + ").");
+      if (HOSTED_FIRMWARE.toLowerCase().endsWith(".hex")) {
+        const parsed = parseIntelHex(await r.text());
+        firmwareBuffer = parsed.buffer.buffer;
+        firmwareStart = parsed.startAddr;
+        log("Parsed HEX: " + parsed.size + " bytes, start 0x" + parsed.startAddr.toString(16));
+      } else {
+        firmwareBuffer = await r.arrayBuffer();
+      }
+      sourceLabel = "hosted: " + HOSTED_FIRMWARE;
+    }
+
+    const size = firmwareBuffer.byteLength;
+    log("");
+    log("────── firmware under test ──────");
+    log("Source:  " + sourceLabel);
+    log("Size:    " + size + " bytes");
+
+    try {
+      const hash = await sha256Hex(firmwareBuffer);
+      log("SHA-256: " + (hash ?? "(unavailable — need https:// or http://localhost)"));
+    } catch (e) {
+      log("SHA-256: failed (" + e.message + ")");
+    }
+
+    if (size === 0) throw new Error("Firmware is empty");
+    if (size > 512 * 1024) throw new Error("Firmware is larger than 512 KB");
+
+    // ---- Validate the app offset ----
+    if (firmwareStart !== null) {
+      if (firmwareStart === FLASH_BASE) {
+        log("⚠ HEX starts at 0x08000000 — flashing there overwrites the bootloader. Aborting.");
+        throw new Error("HEX starts at 0x08000000 (would overwrite bootloader)");
+      }
+      const expectedOffset = parseInt($("offset").value, 10);
+      if (expectedOffset > 0) {
+        const expected = FLASH_BASE + expectedOffset;
+        if (firmwareStart !== expected) {
+          log("⚠ HEX starts at 0x" + firmwareStart.toString(16) +
+              ", but the WeAct bootloader expects the app at 0x" + expected.toString(16) + ".");
+          log("  The write will succeed, but the bootloader will jump to 0x" + expected.toString(16) +
+              " and run garbage — the firmware will not run.");
+          log("  Rebuild the sketch with VECT_TAB_OFFSET=0x" + expectedOffset.toString(16) +
+              ", or set the offset select to match the firmware.");
+        } else {
+          log("✔ HEX starts at the bootloader's app offset 0x" + expected.toString(16) + ".");
+        }
+      }
+    } else {
+      log("(BIN file — start address unknown; assuming it begins at the bootloader's app offset)");
+    }
+    log("─────────────────────────────────");
+
+    // ---- Erase ----
+    log("Erasing…");
+    await sendCommand(CMD_RESET_PAGES);
+    await new Promise(r => setTimeout(r, 100));
+
+    // ---- Write in 1024-byte sectors ----
+    const sectors = Math.ceil(size / SECTOR_SIZE);
+    log(`Writing ${sectors} sectors of ${SECTOR_SIZE} bytes…`);
+
+    for (let sector = 0; sector < sectors; sector++) {
+      const sectorStart = sector * SECTOR_SIZE;
+      const sectorEnd = Math.min(sectorStart + SECTOR_SIZE, size);
+      const sectorData = new Uint8Array(firmwareBuffer, sectorStart, sectorEnd - sectorStart);
+
+      const fullPage = new Uint8Array(SECTOR_SIZE);
+      fullPage.set(sectorData, 0);
+
+      const ackPromise = waitForAck();
+
+      for (let offset = 0; offset < SECTOR_SIZE; offset += HID_TX_SIZE) {
+        const chunk = fullPage.slice(offset, offset + HID_TX_SIZE);
+        await sendDataChunk(chunk);
+        await new Promise(r => setTimeout(r, 1));
+      }
+
+      await ackPromise;
+
+      const pct = Math.floor(((sector + 1) / sectors) * 100);
+      if (pct % 10 === 0 || sector === sectors - 1) {
+        log(`  ${pct}%`);
+      }
+    }
+
+    log("All " + size + " bytes written.");
+
+    // ---- Reboot ----
+    log("Rebooting…");
+    await sendCommand(CMD_REBOOT_MCU);
+
+    log("");
+    log("Flashing finished. The board should restart into the new firmware.");
+    log("If the OLED stays dark, tap NRST once and wait ~10 s.");
+    setStatus("Written. The board is restarting. If the screen stays dark, tap NRST.", "ok");
+
+    hidDevice = null;
+    $("flash").disabled = true;
+
+  } catch (e) {
+    setStatus("Flashing failed: " + ((e && e.message) ? e.message : String(e)), "err");
+    log(String(e));
+    $("flash").disabled = !hidDevice;
+  }
+
+  $("connect").disabled = false;
+}
+
+/* ---------- init ---------- */
+if (!("hid" in navigator)) {
+  $("unsupported").style.display = "block";
+  $("connect").disabled = true;
+} else {
+  navigator.hid.addEventListener("disconnect", e => {
+    if (hidDevice && e.device === hidDevice) {
+      hidDevice = null;
+      $("flash").disabled = true;
+      setStatus("Device disconnected.");
+    }
+  });
+}
+
+$("connect").addEventListener("click", connect);
+$("flash").addEventListener("click", flash);
+</script>
+</body>
+</html>
