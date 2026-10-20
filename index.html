@@ -187,7 +187,6 @@
     const flashBtn = document.getElementById('flashBtn');
     const statusDiv = document.getElementById('status');
 
-    // Intel HEX parser for bootloader setup
     function parseHexToBytes(hexText) {
       const lines = hexText.split(/\r?\n/);
       let bytes = [];
@@ -196,15 +195,51 @@
         const len = parseInt(line.substr(1, 2), 16);
         const type = parseInt(line.substr(7, 2), 16);
 
-        if (type === 0) { // Data record
+        if (type === 0) {
           for (let i = 0; i < len; i++) {
             bytes.push(parseInt(line.substr(9 + (i * 2), 2), 16));
           }
-        } else if (type === 1) { // EOF
+        } else if (type === 1) {
           break;
         }
       }
       return new Uint8Array(bytes);
+    }
+
+    async function getDFUStatus(device) {
+      const res = await device.controlTransferIn({
+        requestType: 'class',
+        recipient: 'interface',
+        request: 3, // DFU_GETSTATUS
+        value: 0,
+        index: 0
+      }, 6);
+      return new Uint8Array(res.data.buffer);
+    }
+
+    async function clearDFUStatus(device) {
+      try {
+        await device.controlTransferOut({
+          requestType: 'class',
+          recipient: 'interface',
+          request: 4, // DFU_CLRSTATUS
+          value: 0,
+          index: 0
+        });
+      } catch(e) {}
+    }
+
+    async function setDFUAddress(device, address) {
+      const cmd = new Uint8Array([0x21, address & 0xFF, (address >> 8) & 0xFF, (address >> 16) & 0xFF, (address >> 24) & 0xFF]);
+      await device.controlTransferOut({
+        requestType: 'class',
+        recipient: 'interface',
+        request: 1, // DFU_DNLOAD
+        value: 0,
+        index: 0
+      }, cmd);
+      await getDFUStatus(device);
+      await getDFUStatus(device);
     }
 
     flashBtn.addEventListener('click', async () => {
@@ -233,25 +268,27 @@
         const hexPart = manifest.builds[0].parts.find(p => p.offset === "0x0");
         const binPart = manifest.builds[0].parts.find(p => p.offset === "0x4000");
 
-        // Fetch and parse WeAct Bootloader .hex
         const hexRes = await fetch(hexPart.path + '?v=' + Date.now());
         const hexText = await hexRes.text();
         const bootloaderBytes = parseHexToBytes(hexText);
 
-        // Fetch Application .bin
         const binRes = await fetch(binPart.path + '?v=' + Date.now());
         const binBuffer = await binRes.arrayBuffer();
         const appBytes = new Uint8Array(binBuffer);
 
-        // Combine Bootloader (0x0) + App Firmware (0x4000 offset = padding up to 16384 bytes)
         const fullMemoryMap = new Uint8Array(0x4000 + appBytes.length);
         fullMemoryMap.set(bootloaderBytes.subarray(0, 0x4000), 0);
         fullMemoryMap.set(appBytes, 0x4000);
 
-        statusDiv.innerText = `Flashing ${fullMemoryMap.length} bytes (Bootloader + App Firmware)...`;
+        statusDiv.innerText = "Setting Flash Pointer to 0x08000000...";
+        await clearDFUStatus(device);
+        await setDFUAddress(device, 0x08000000);
 
-        // Flashing loop over WebUSB DFU interface
+        statusDiv.innerText = `Flashing ${fullMemoryMap.length} bytes...`;
+
         const chunkSize = 1024;
+        let blockNum = 2; // Block 2 is the first payload block following address pointer set
+
         for (let offset = 0; offset < fullMemoryMap.length; offset += chunkSize) {
           const chunk = fullMemoryMap.slice(offset, offset + chunkSize);
 
@@ -259,9 +296,12 @@
             requestType: 'class',
             recipient: 'interface',
             request: 1, // DFU_DNLOAD
-            value: Math.floor(offset / chunkSize) + 2,
+            value: blockNum++,
             index: 0
           }, chunk);
+
+          await getDFUStatus(device);
+          await getDFUStatus(device);
 
           const percent = Math.round(((offset + chunk.length) / fullMemoryMap.length) * 100);
           statusDiv.innerText = `Flashing Internal Flash: ${percent}%`;
