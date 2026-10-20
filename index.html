@@ -148,23 +148,23 @@
     <header class="header">
       <div class="brand">.axs instruments</div>
       <h1>MC8P MkII MIDI Controller</h1>
-      <p class="subtitle">Official WebHID Firmware Flashing Portal</p>
+      <p class="subtitle">Official WebHID Firmware Flasher (HEX Engine)</p>
       <div class="badge-container">
         <span class="badge">Hardware: WeAct STM32F411 v3.0</span>
-        <span class="badge">Firmware: v3.1</span>
+        <span class="badge">Firmware: v3.1 (.hex)</span>
       </div>
     </header>
 
     <div class="warning-box">
-      <strong>Requirements:</strong> Google Chrome or Microsoft Edge. Hold down the <strong>KEY button</strong> while connecting USB-C to enter WeAct Bootloader mode.
+      <strong>Requirements:</strong> Use Google Chrome or Microsoft Edge. Connect USB-C while holding the <strong>KEY button</strong> to enter WeAct Bootloader mode.
     </div>
 
     <section class="section">
       <h2 class="section-title">Flashing Instructions</h2>
       <ol>
         <li>Unplug USB-C cable.</li>
-        <li>Press and hold the <strong>KEY</strong> button (User Button) on the board.</li>
-        <li>Plug in USB-C while holding <strong>KEY</strong>, then release. The onboard LED will pulse smoothly.</li>
+        <li>Press and hold the <strong>KEY</strong> button on the board.</li>
+        <li>Plug in USB-C while holding <strong>KEY</strong>, then release. The LED will pulse smoothly.</li>
         <li>Click <strong>Flash Firmware</strong> and select <strong>WeAct STM32 HID Bootloader</strong>.</li>
       </ol>
     </section>
@@ -188,6 +188,32 @@
     const flashBtn = document.getElementById('flashBtn');
     const statusDiv = document.getElementById('status');
 
+    // Intel HEX parser function
+    function parseHexToBytes(hexText) {
+      const lines = hexText.split(/\r?\n/);
+      let bytes = [];
+      let baseAddr = 0;
+
+      for (const line of lines) {
+        if (!line.startsWith(':')) continue;
+        const len = parseInt(line.substr(1, 2), 16);
+        const addr = parseInt(line.substr(3, 4), 16);
+        const type = parseInt(line.substr(7, 2), 16);
+
+        if (type === 0) { // Data Record
+          for (let i = 0; i < len; i++) {
+            const byteVal = parseInt(line.substr(9 + (i * 2), 2), 16);
+            bytes.push(byteVal);
+          }
+        } else if (type === 4) { // Extended Linear Address Record
+          baseAddr = parseInt(line.substr(9, 4), 16) << 16;
+        } else if (type === 1) { // End of File
+          break;
+        }
+      }
+      return new Uint8Array(bytes);
+    }
+
     flashBtn.addEventListener('click', async () => {
       if (!navigator.hid) {
         statusDiv.innerText = "Error: WebHID is not supported in this browser. Please use Chrome or Edge.";
@@ -198,7 +224,6 @@
         flashBtn.disabled = true;
         statusDiv.innerText = "Requesting WeAct Bootloader Device...";
 
-        // Match WeAct HID Bootloader (0x0483:0x572a) explicitly
         const devices = await navigator.hid.requestDevice({
           filters: [
             { vendorId: 0x0483, productId: 0x572a },
@@ -214,19 +239,20 @@
 
         const device = devices[0];
         await device.open();
-        statusDiv.innerText = "Connected to WeAct Bootloader! Fetching firmware...";
+        statusDiv.innerText = "Connected! Downloading HEX file...";
 
         const manifestRes = await fetch('manifest.json?v=' + Date.now());
         const manifest = await manifestRes.json();
-        const binPart = manifest.builds[0].parts.find(p => p.offset === "0x4000");
+        const hexPart = manifest.builds[0].parts.find(p => p.path.endsWith('.hex'));
 
-        const binRes = await fetch(binPart.path + '?v=' + Date.now());
-        const arrayBuffer = await binRes.arrayBuffer();
-        const binaryBytes = new Uint8Array(arrayBuffer);
+        const hexRes = await fetch(hexPart.path + '?v=' + Date.now());
+        const hexText = await hexRes.text();
 
-        statusDiv.innerText = `Flashing ${binaryBytes.length} bytes to 0x4000...`;
+        statusDiv.innerText = "Parsing Intel HEX data records...";
+        const binaryBytes = parseHexToBytes(hexText);
 
-        // Packet size for WeAct HID Bootloader is 64 bytes
+        statusDiv.innerText = `Flashing ${binaryBytes.length} bytes extracted from HEX...`;
+
         const packetSize = 64;
         for (let i = 0; i < binaryBytes.length; i += packetSize) {
           const chunk = binaryBytes.slice(i, i + packetSize);
@@ -236,7 +262,7 @@
           await device.sendReport(0, report);
 
           const percent = Math.round(((i + chunk.length) / binaryBytes.length) * 100);
-          statusDiv.innerText = `Flashing Firmware: ${percent}%`;
+          statusDiv.innerText = `Flashing Firmware (.hex): ${percent}%`;
         }
 
         statusDiv.innerText = "Flash Successful! Disconnect and reconnect USB-C to launch.";
