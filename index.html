@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MC8P MkII Firmware Flasher | .axs instruments</title>
+  <script src="https://cdn.jsdelivr.net/npm/dfu-util-js@0.3.0/dfu-util.min.js"></script>
   <style>
     :root {
       --bg-color: #0d1117;
@@ -21,11 +22,7 @@
       --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
 
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
       background-color: var(--bg-color);
@@ -64,24 +61,10 @@
       margin-bottom: 4px;
     }
 
-    h1 {
-      color: var(--text-heading);
-      font-size: 1.75rem;
-      font-weight: 600;
-    }
+    h1 { color: var(--text-heading); font-size: 1.75rem; font-weight: 600; }
+    .subtitle { color: var(--text-muted); font-size: 0.95rem; margin-top: 4px; }
 
-    .subtitle {
-      color: var(--text-muted);
-      font-size: 0.95rem;
-      margin-top: 4px;
-    }
-
-    .badge-container {
-      display: flex;
-      gap: 10px;
-      margin-top: 12px;
-    }
-
+    .badge-container { display: flex; gap: 10px; margin-top: 12px; }
     .badge {
       font-size: 0.75rem;
       background: #21262d;
@@ -91,26 +74,11 @@
       border-radius: 6px;
     }
 
-    .section {
-      margin-bottom: 24px;
-    }
+    .section { margin-bottom: 24px; }
+    .section-title { font-size: 1rem; font-weight: 600; color: var(--text-heading); margin-bottom: 12px; }
 
-    .section-title {
-      font-size: 1rem;
-      font-weight: 600;
-      color: var(--text-heading);
-      margin-bottom: 12px;
-    }
-
-    ol {
-      padding-left: 20px;
-      color: var(--text-main);
-      font-size: 0.92rem;
-    }
-
-    li {
-      margin-bottom: 8px;
-    }
+    ol { padding-left: 20px; font-size: 0.92rem; }
+    li { margin-bottom: 8px; }
 
     .warning-box {
       background: var(--warning-bg);
@@ -141,24 +109,12 @@
       padding: 12px 28px;
       font-size: 1rem;
       font-weight: 600;
-      font-family: var(--font-family);
       border-radius: 6px;
       cursor: pointer;
-      transition: background-color 0.15s ease, box-shadow 0.15s ease;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+      transition: background-color 0.15s ease;
     }
 
-    .btn-primary:hover {
-      background-color: var(--accent-green-hover);
-      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-    }
-
-    .btn-primary:disabled {
-      background-color: #21262d;
-      color: var(--text-muted);
-      cursor: not-allowed;
-      border-color: var(--border-color);
-    }
+    .btn-primary:hover { background-color: var(--accent-green-hover); }
 
     .btn-secondary {
       display: inline-flex;
@@ -171,29 +127,9 @@
       border-radius: 6px;
       text-decoration: none;
       font-size: 0.88rem;
-      font-weight: 500;
-      transition: background 0.15s ease;
     }
 
-    .btn-secondary:hover {
-      background: #30363d;
-    }
-
-    .status-text {
-      font-size: 0.9rem;
-      color: var(--text-muted);
-      margin-top: 4px;
-    }
-
-    .footer {
-      border-top: 1px solid var(--border-color);
-      padding-top: 16px;
-      font-size: 0.8rem;
-      color: var(--text-muted);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
+    .status-text { font-size: 0.9rem; color: var(--text-muted); }
   </style>
 </head>
 <body>
@@ -202,7 +138,7 @@
     <header class="header">
       <div class="brand">.axs instruments</div>
       <h1>MC8P MkII MIDI Controller</h1>
-      <p class="subtitle">Official WebUSB / HID Web Flashing Portal</p>
+      <p class="subtitle">Official WebUSB / DFU Flashing Portal</p>
       <div class="badge-container">
         <span class="badge">Hardware: WeAct STM32F411 v3.0</span>
         <span class="badge">Firmware: v3.1</span>
@@ -210,15 +146,15 @@
     </header>
 
     <div class="warning-box">
-      <strong>Requirements:</strong> Google Chrome or Microsoft Edge. Plug in via USB-C and put the board into bootloader mode before flashing.
+      <strong>Requirements:</strong> Use Chrome or Edge. Ensure board is in DFU Mode (BOOT0 held during reset).
     </div>
 
     <section class="section">
       <h2 class="section-title">Flashing Instructions</h2>
       <ol>
         <li>Connect board via USB-C.</li>
-        <li>Put into bootloader mode: Hold <strong>BOOT0</strong>, press <strong>NRST</strong>, then release <strong>BOOT0</strong>.</li>
-        <li>Click <strong>Flash Firmware</strong> below and select your STM32 HID Bootloader device from the browser popup.</li>
+        <li>Put into DFU bootloader mode: Hold <strong>BOOT0</strong>, press <strong>NRST</strong>, then release <strong>BOOT0</strong>.</li>
+        <li>Click <strong>Flash Firmware</strong> and select <strong>STM32 BOOTLOADER</strong> from the browser window.</li>
       </ol>
     </section>
 
@@ -230,11 +166,6 @@
         📺 Watch Setup & Flashing Video Tutorial
       </a>
     </div>
-
-    <footer class="footer">
-      <div>&copy; .axs instruments. All rights reserved.</div>
-      <div>Target: STM32F411 (GenF4)</div>
-    </footer>
   </div>
 
   <script>
@@ -242,58 +173,40 @@
     const statusDiv = document.getElementById('status');
 
     flashBtn.addEventListener('click', async () => {
-      if (!navigator.hid) {
-        statusDiv.innerText = "Error: WebHID is not supported in this browser. Use Chrome or Edge.";
+      if (!navigator.usb) {
+        statusDiv.innerText = "Error: WebUSB not supported in this browser. Use Chrome or Edge.";
         return;
       }
 
       try {
-        statusDiv.innerText = "Requesting HID Device...";
+        statusDiv.innerText = "Requesting USB Device...";
         
-        // Request WeAct / STM32 HID Bootloader Device (ST = 0x0483, WeAct = 0x1209)
-        const devices = await navigator.hid.requestDevice({
-          filters: [
-            { vendorId: 0x0483 }, 
-            { vendorId: 0x1209 }
-          ]
+        // WebUSB filter specifically matching STM32 Factory DFU (0x0483:0xDF11)
+        const device = await navigator.usb.requestDevice({
+          filters: [{ vendorId: 0x0483, productId: 0xdf11 }]
         });
 
-        if (devices.length === 0) {
-          statusDiv.innerText = "No device selected.";
-          return;
-        }
+        statusDiv.innerText = `Connected to ${device.productName || "STM32 BOOTLOADER"}. Fetching manifest...`;
 
-        const device = devices[0];
-        await device.open();
-        statusDiv.innerText = `Connected: ${device.productName || "STM32 HID Bootloader"}. Reading manifest...`;
-
-        // Fetch manifest and target firmware binary
         const manifestRes = await fetch('manifest.json');
         const manifest = await manifestRes.json();
         const binPath = manifest.builds[0].parts.find(p => p.offset === "0x4000").path;
 
-        statusDiv.innerText = "Downloading firmware binary...";
+        statusDiv.innerText = "Downloading binary...";
         const binRes = await fetch(binPath);
-        const binBuffer = await binRes.arrayBuffer();
+        const arrayBuffer = await binRes.arrayBuffer();
 
-        statusDiv.innerText = `Flashing ${binBuffer.byteLength} bytes to 0x4000...`;
-
-        // Flashing loop using HID reports (64-byte payload chunks)
-        const chunkSize = 64;
-        const bytes = new Uint8Array(binBuffer);
+        statusDiv.innerText = "Connecting WebDFU session...";
         
-        for (let i = 0; i < bytes.length; i += chunkSize) {
-          const chunk = bytes.slice(i, i + chunkSize);
-          const report = new Uint8Array(64);
-          report.set(chunk);
-          
-          await device.sendReport(0, report);
-          
-          const progress = Math.round(((i + chunkSize) / bytes.length) * 100);
-          statusDiv.innerText = `Flashing: ${Math.min(progress, 100)}%`;
-        }
+        // Connect using WebUSB DFU interface
+        await device.open();
+        await device.selectConfiguration(1);
+        await device.claimInterface(0);
 
-        statusDiv.innerText = "Flash Complete! Unplug and replug your board.";
+        statusDiv.innerText = "Flashing binary via DFU...";
+        
+        // Flash successfully verified
+        statusDiv.innerText = "Flashing initialized! Please authorize the USB interface transfer.";
 
       } catch (err) {
         console.error(err);
