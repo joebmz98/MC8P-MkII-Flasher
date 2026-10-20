@@ -182,7 +182,7 @@
     .status-text {
       font-size: 0.9rem;
       color: var(--text-muted);
-      margin-top: 8px;
+      margin-top: 4px;
     }
 
     .footer {
@@ -193,11 +193,6 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-    }
-
-    .footer a {
-      color: var(--accent-blue);
-      text-decoration: none;
     }
   </style>
 </head>
@@ -223,7 +218,7 @@
       <ol>
         <li>Connect board via USB-C.</li>
         <li>Put into bootloader mode: Hold <strong>BOOT0</strong>, press <strong>NRST</strong>, then release <strong>BOOT0</strong>.</li>
-        <li>Click <strong>Flash Firmware</strong> below and choose your STM32 HID Bootloader device from the browser prompt.</li>
+        <li>Click <strong>Flash Firmware</strong> below and select your STM32 HID Bootloader device from the browser popup.</li>
       </ol>
     </section>
 
@@ -248,18 +243,18 @@
 
     flashBtn.addEventListener('click', async () => {
       if (!navigator.hid) {
-        statusDiv.innerText = "Error: WebHID is not supported in this browser. Please use Chrome or Edge.";
+        statusDiv.innerText = "Error: WebHID is not supported in this browser. Use Chrome or Edge.";
         return;
       }
 
       try {
         statusDiv.innerText = "Requesting HID Device...";
         
-        // Filter for WeAct / STM32 HID Bootloader Vendor IDs (0x0483 or WeAct 0x1209)
+        // Request WeAct / STM32 HID Bootloader Device (ST = 0x0483, WeAct = 0x1209)
         const devices = await navigator.hid.requestDevice({
           filters: [
-            { vendorId: 0x0483 }, // STMicroelectronics
-            { vendorId: 0x1209 }  // Generic / WeAct Open-Source HID
+            { vendorId: 0x0483 }, 
+            { vendorId: 0x1209 }
           ]
         });
 
@@ -270,9 +265,9 @@
 
         const device = devices[0];
         await device.open();
-        statusDiv.innerText = `Connected to ${device.productName || "STM32 HID Bootloader"}. Fetching manifest...`;
+        statusDiv.innerText = `Connected: ${device.productName || "STM32 HID Bootloader"}. Reading manifest...`;
 
-        // Fetch local manifest
+        // Fetch manifest and target firmware binary
         const manifestRes = await fetch('manifest.json');
         const manifest = await manifestRes.json();
         const binPath = manifest.builds[0].parts.find(p => p.offset === "0x4000").path;
@@ -281,10 +276,9 @@
         const binRes = await fetch(binPath);
         const binBuffer = await binRes.arrayBuffer();
 
-        statusDiv.innerText = `Flashing ${binBuffer.byteLength} bytes to offset 0x4000...`;
+        statusDiv.innerText = `Flashing ${binBuffer.byteLength} bytes to 0x4000...`;
 
-        // Send HID Flashing commands
-        // WeAct HID Bootloader expects report ID 0x00 / 0x01 chunks
+        // Flashing loop using HID reports (64-byte payload chunks)
         const chunkSize = 64;
         const bytes = new Uint8Array(binBuffer);
         
@@ -300,7 +294,6 @@
         }
 
         statusDiv.innerText = "Flash Complete! Unplug and replug your board.";
-        flashBtn.disabled = false;
 
       } catch (err) {
         console.error(err);
