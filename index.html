@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MC8P MkII Firmware Flasher | .axs instruments</title>
-  <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
   <style>
     :root {
       --bg-color: #0d1117;
@@ -128,25 +127,18 @@
       flex-direction: column;
       align-items: center;
       gap: 16px;
-      padding: 20px 0;
+      padding: 24px;
       background: #0d1117;
       border: 1px solid var(--border-color);
       border-radius: 8px;
       margin-bottom: 24px;
     }
 
-    /* Direct styling targeting the standard WebUSB installer button */
-    esp-web-install-button {
-      --esp-tools-button-color: #ffffff;
-      --esp-tools-button-background-color: var(--accent-green);
-      --esp-tools-button-border-radius: 6px;
-    }
-
-    esp-web-install-button::part(button) {
+    .btn-primary {
       background-color: var(--accent-green);
       color: #ffffff;
       border: 1px solid rgba(255,255,255,0.1);
-      padding: 12px 24px;
+      padding: 12px 28px;
       font-size: 1rem;
       font-weight: 600;
       font-family: var(--font-family);
@@ -156,9 +148,16 @@
       box-shadow: 0 1px 3px rgba(0,0,0,0.2);
     }
 
-    esp-web-install-button::part(button):hover {
+    .btn-primary:hover {
       background-color: var(--accent-green-hover);
       box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    }
+
+    .btn-primary:disabled {
+      background-color: #21262d;
+      color: var(--text-muted);
+      cursor: not-allowed;
+      border-color: var(--border-color);
     }
 
     .btn-secondary {
@@ -180,6 +179,12 @@
       background: #30363d;
     }
 
+    .status-text {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      margin-top: 8px;
+    }
+
     .footer {
       border-top: 1px solid var(--border-color);
       padding-top: 16px;
@@ -193,10 +198,6 @@
     .footer a {
       color: var(--accent-blue);
       text-decoration: none;
-    }
-
-    .footer a:hover {
-      text-decoration: underline;
     }
   </style>
 </head>
@@ -214,22 +215,21 @@
     </header>
 
     <div class="warning-box">
-      <strong>Requirements:</strong> Must use Google Chrome, Microsoft Edge, or Opera on Desktop. Connect your board using a USB-C data cable directly (avoid unshielded charge-only cables).
+      <strong>Requirements:</strong> Google Chrome or Microsoft Edge. Plug in via USB-C and put the board into bootloader mode before flashing.
     </div>
 
     <section class="section">
       <h2 class="section-title">Flashing Instructions</h2>
       <ol>
-        <li>Connect your WeAct Blackpill board to your computer via USB-C.</li>
-        <li>Put board into HID Bootloader mode: press and hold <strong>BOOT0</strong>, press <strong>NRST</strong> once, then release <strong>BOOT0</strong>.</li>
-        <li>Click the <strong>Flash Firmware</strong> button below.</li>
-        <li>Select your STM32 HID / Serial device from the browser popup dialog and click <strong>Connect</strong>.</li>
+        <li>Connect board via USB-C.</li>
+        <li>Put into bootloader mode: Hold <strong>BOOT0</strong>, press <strong>NRST</strong>, then release <strong>BOOT0</strong>.</li>
+        <li>Click <strong>Flash Firmware</strong> below and choose your STM32 HID Bootloader device from the browser prompt.</li>
       </ol>
     </section>
 
     <div class="action-area">
-      <!-- Standard esp-web-install-button referencing local manifest -->
-      <esp-web-install-button manifest="manifest.json"></esp-web-install-button>
+      <button id="flashBtn" class="btn-primary">Flash Firmware</button>
+      <div id="status" class="status-text">Ready to flash</div>
       
       <a href="https://youtu.be/ENxouRuxUlE" target="_blank" rel="noopener" class="btn-secondary">
         📺 Watch Setup & Flashing Video Tutorial
@@ -242,5 +242,71 @@
     </footer>
   </div>
 
+  <script>
+    const flashBtn = document.getElementById('flashBtn');
+    const statusDiv = document.getElementById('status');
+
+    flashBtn.addEventListener('click', async () => {
+      if (!navigator.hid) {
+        statusDiv.innerText = "Error: WebHID is not supported in this browser. Please use Chrome or Edge.";
+        return;
+      }
+
+      try {
+        statusDiv.innerText = "Requesting HID Device...";
+        
+        // Filter for WeAct / STM32 HID Bootloader Vendor IDs (0x0483 or WeAct 0x1209)
+        const devices = await navigator.hid.requestDevice({
+          filters: [
+            { vendorId: 0x0483 }, // STMicroelectronics
+            { vendorId: 0x1209 }  // Generic / WeAct Open-Source HID
+          ]
+        });
+
+        if (devices.length === 0) {
+          statusDiv.innerText = "No device selected.";
+          return;
+        }
+
+        const device = devices[0];
+        await device.open();
+        statusDiv.innerText = `Connected to ${device.productName || "STM32 HID Bootloader"}. Fetching manifest...`;
+
+        // Fetch local manifest
+        const manifestRes = await fetch('manifest.json');
+        const manifest = await manifestRes.json();
+        const binPath = manifest.builds[0].parts.find(p => p.offset === "0x4000").path;
+
+        statusDiv.innerText = "Downloading firmware binary...";
+        const binRes = await fetch(binPath);
+        const binBuffer = await binRes.arrayBuffer();
+
+        statusDiv.innerText = `Flashing ${binBuffer.byteLength} bytes to offset 0x4000...`;
+
+        // Send HID Flashing commands
+        // WeAct HID Bootloader expects report ID 0x00 / 0x01 chunks
+        const chunkSize = 64;
+        const bytes = new Uint8Array(binBuffer);
+        
+        for (let i = 0; i < bytes.length; i += chunkSize) {
+          const chunk = bytes.slice(i, i + chunkSize);
+          const report = new Uint8Array(64);
+          report.set(chunk);
+          
+          await device.sendReport(0, report);
+          
+          const progress = Math.round(((i + chunkSize) / bytes.length) * 100);
+          statusDiv.innerText = `Flashing: ${Math.min(progress, 100)}%`;
+        }
+
+        statusDiv.innerText = "Flash Complete! Unplug and replug your board.";
+        flashBtn.disabled = false;
+
+      } catch (err) {
+        console.error(err);
+        statusDiv.innerText = `Error: ${err.message || err}`;
+      }
+    });
+  </script>
 </body>
 </html>

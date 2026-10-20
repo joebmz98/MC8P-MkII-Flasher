@@ -10,7 +10,7 @@
           "offset": "0x0"
         },
         {
-          "path": "firmware/MC8P_MIDICONTROLLER_FIRMWARE_STM.bin",
+          "path": "firmware/MC8P_MIDICONTROLLER_FIRMWARE_STM.ino.bin",
           "offset": "0x4000"
         }
       ]
