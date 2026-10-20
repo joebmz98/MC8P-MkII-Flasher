@@ -240,14 +240,25 @@ export const F411_LAYOUT = parseMemoryLayout('@Internal Flash  /0x08000000/04*01
 // The device
 // ====================================================================
 
+// Some boards (seen on a Black Pill clone) take short USB requests fine but fail
+// long ones with "A transfer error has occurred". A failed transfer is retried
+// at the same size once; if the same block fails again, blocks are halved
+// (down to MIN_BLOCK) until they get through. One-off glitches don't shrink it.
+const MIN_BLOCK = 64;
+const USB_RETRIES = 10;
+const STATUS_RETRIES = 2;
+
 export class StmDfuse {
-  constructor(usbDevice, { log = () => {} } = {}) {
+  constructor(usbDevice, { log = () => {}, blockSize = 0 } = {}) {
     this.dev = usbDevice;
     this.log = log;
     this.iface = 0;
     this.alt = 0;
     this.transferSize = 2048;
+    this.requestedBlockSize = blockSize;
+    this.blockSize = 2048;
     this.layout = F411_LAYOUT;
+    this.usbErrors = 0;
   }
 
   async open() {
@@ -277,9 +288,20 @@ export class StmDfuse {
     await dev.selectAlternateInterface(this.iface, this.alt);
 
     if (config && config.transferSize) this.transferSize = config.transferSize;
+    this.blockSize = this.transferSize;
+    if (this.requestedBlockSize > 0) {
+      this.blockSize = Math.max(MIN_BLOCK, Math.min(this.transferSize, this.requestedBlockSize));
+    }
     const layout = parseMemoryLayout(found.name);
     if (layout) this.layout = layout;
     else this.log(`Could not read the flash layout (${found.name || 'no name'}), assuming STM32F411.`, 'WARN');
+
+    const ver = [dev.deviceVersionMajor, dev.deviceVersionMinor, dev.deviceVersionSubminor];
+    this.log(
+      `Bootloader version ${ver.every((v) => v !== undefined) ? ver.join('.') : 'unknown'}, ` +
+      `transfer size ${this.transferSize} (${config && config.transferSize ? 'from device' : 'default'}), ` +
+      `block size ${this.blockSize}`
+    );
 
     await this.resetState();
   }
@@ -396,27 +418,87 @@ export class StmDfuse {
       }
       if (st.state === STATE.dfuERROR) {
         await this.clearStatus().catch(() => {});
-        throw new DfuError(`${what} failed: ${STATUS_TEXT[st.status] || 'status ' + st.status}`);
+        const err = new DfuError(`${what} failed: ${STATUS_TEXT[st.status] || 'status ' + st.status}`);
+        err.deviceStatus = st.status;
+        throw err;
       }
       if (st.state !== STATE.dfuDNBUSY && st.state !== STATE.dfuDNLOAD_SYNC) return st;
       if (Date.now() - t0 > timeoutMs) throw new DfuError(`${what} timed out`);
-      await sleep(Math.min(Math.max(st.pollTimeout, 1), 2000));
+      if (st.pollTimeout > 0) await sleep(Math.min(st.pollTimeout, 2000));
     }
   }
 
-  // DNLOAD with wBlockNum = 0 carries a DfuSe command.
+  // DNLOAD with wBlockNum = 0 carries a DfuSe command. A stall means the
+  // bootloader refused it; any other failure is a USB problem and is passed on
+  // unchanged so the caller can retry.
   async command(bytes, what) {
     try {
       await this.requestOut(DFU_DNLOAD, 0, bytes);
     } catch (e) {
+      if (!(e instanceof DfuError)) throw e;
       const st = await this.getStatus().catch(() => null);
       if (st && st.state === STATE.dfuERROR) await this.clearStatus().catch(() => {});
-      throw new DfuError(`${what} was rejected by the bootloader`);
+      const err = new DfuError(`${what} was rejected by the bootloader`);
+      err.deviceStatus = st ? st.status : -1;
+      throw err;
     }
     const st = await this.waitWhileBusy(what);
     if (st.state !== STATE.dfuDNLOAD_IDLE) {
       throw new DfuError(`${what}: unexpected state ${STATE_NAMES[st.state] || st.state}`);
     }
+  }
+
+  // After a failed transfer the bootloader can be in almost any state. Get it
+  // back to dfuIDLE, tolerating further USB errors on the way.
+  async recover() {
+    for (let i = 0; i < 20; i++) {
+      let st;
+      try {
+        st = await this.getStatus();
+      } catch (e) {
+        if (e && e.name === 'NotFoundError') throw e;
+        await sleep(50);
+        continue;
+      }
+      try {
+        if (st.state === STATE.dfuIDLE) return;
+        if (st.state === STATE.dfuERROR) await this.clearStatus();
+        else if (st.state === STATE.dfuDNBUSY || st.state === STATE.dfuDNLOAD_SYNC) await sleep(Math.max(st.pollTimeout, 10));
+        else await this.abort();
+      } catch (e) {
+        if (e && e.name === 'NotFoundError') throw e;
+        await sleep(50);
+      }
+    }
+    throw new DfuError('Lost contact with the bootloader after a USB error.');
+  }
+
+  // Decide whether a failed write/read is worth another go, shrinking the
+  // block size for USB-level failures. Throws when it is time to give up.
+  async retryOrThrow(e, attempt, what, shrink = true) {
+    const text = `${(e && e.name) || 'Error'}: ${(e && e.message) || e}`;
+    if (e && e.name === 'NotFoundError') {
+      throw new DfuError(`The board disconnected while ${what}. Check the cable and re-enter DFU mode.`);
+    }
+    const isUsb = !(e instanceof DfuError);
+    if (isUsb) this.usbErrors++;
+    if (attempt > (isUsb ? USB_RETRIES : STATUS_RETRIES)) {
+      if (!isUsb) throw e;
+      const err = new DfuError(
+        `USB transfers keep failing while ${what} (${text}), even in ${this.blockSize} byte blocks.`
+      );
+      err.usbUnreliable = true;
+      throw err;
+    }
+    this.log(`Problem while ${what}: ${text}`, 'WARN');
+    if (isUsb && shrink && attempt >= 2 && this.blockSize > MIN_BLOCK) {
+      this.blockSize = Math.max(MIN_BLOCK, this.blockSize >> 1);
+      this.log(`Retrying with ${this.blockSize} byte blocks`, 'WARN');
+    } else {
+      this.log(`Retrying (attempt ${attempt + 1})`, 'WARN');
+    }
+    await sleep(50 * attempt);
+    await this.recover();
   }
 
   setAddress(addr) {
@@ -439,22 +521,50 @@ export class StmDfuse {
     }
   }
 
-  // Read `length` bytes starting at addr. Like dfu-util: set the pointer once,
-  // return to dfuIDLE, then UPLOAD blocks 2, 3, 4... of transferSize bytes,
-  // which the bootloader reads from ((block - 2) * transferSize) + pointer.
-  async read(addr, length, onBytes = () => {}) {
-    const out = new Uint8Array(length);
+  // Write any length, chunk by chunk, retrying failed chunks. Rewriting a chunk
+  // that was partly programmed is safe: the same bits are cleared again.
+  async writeRange(addr, data, onBytes = () => {}) {
+    let off = 0;
+    let attempt = 0;
+    while (off < data.length) {
+      const n = Math.min(this.blockSize, data.length - off);
+      try {
+        await this.writeChunk(addr + off, data.subarray(off, off + n));
+        off += n;
+        attempt = 0;
+        onBytes(n);
+      } catch (e) {
+        await this.retryOrThrow(e, ++attempt, `writing ${n} bytes at ${hex32(addr + off)}`);
+      }
+    }
+  }
+
+  // Read one chunk: point at addr, go back to dfuIDLE, then UPLOAD block 2,
+  // which the bootloader reads from the pointer itself. Same idea as writes.
+  async readChunk(addr, n) {
     await this.abort();
     await this.setAddress(addr);
     await this.abort();
+    const dv = await this.requestIn(DFU_UPLOAD, 2, n);
+    if (dv.byteLength !== n) throw new DfuError(`Short read at ${hex32(addr)}`);
+    return new Uint8Array(dv.buffer, dv.byteOffset, n);
+  }
+
+  // Read `length` bytes starting at addr.
+  async read(addr, length, onBytes = () => {}) {
+    const out = new Uint8Array(length);
     let done = 0;
-    for (let block = 2; done < length; block++) {
-      const n = Math.min(this.transferSize, length - done);
-      const dv = await this.requestIn(DFU_UPLOAD, block, n);
-      if (dv.byteLength !== n) throw new DfuError(`Short read at ${hex32(addr + done)}`);
-      out.set(new Uint8Array(dv.buffer, dv.byteOffset, n), done);
-      done += n;
-      onBytes(n);
+    let attempt = 0;
+    while (done < length) {
+      const n = Math.min(this.blockSize, length - done);
+      try {
+        out.set(await this.readChunk(addr + done, n), done);
+        done += n;
+        attempt = 0;
+        onBytes(n);
+      } catch (e) {
+        await this.retryOrThrow(e, ++attempt, `reading ${n} bytes at ${hex32(addr + done)}`);
+      }
     }
     await this.abort();
     return out;
@@ -494,17 +604,23 @@ export class StmDfuse {
 
     for (const sec of sectors) {
       this.log(`Erasing ${sec.size / 1024} KB sector at ${hex32(sec.start)}`);
-      await this.eraseSector(sec.start);
+      for (let attempt = 1; ; attempt++) {
+        try {
+          await this.eraseSector(sec.start);
+          break;
+        } catch (e) {
+          await this.retryOrThrow(e, attempt, `erasing ${hex32(sec.start)}`, false);
+        }
+      }
       tick(sec.size / 2, 'Erasing');
     }
 
     for (const s of segments) {
       this.log(`Writing ${s.data.length} bytes to ${hex32(s.address)} (${s.label})`);
-      for (let off = 0; off < s.data.length; off += this.transferSize) {
-        const chunk = s.data.subarray(off, off + this.transferSize);
-        await this.writeChunk(s.address + off, chunk);
-        tick(chunk.length, 'Writing');
-      }
+      await this.writeRange(s.address, s.data, (n) => tick(n, 'Writing'));
+    }
+    if (this.usbErrors) {
+      this.log(`Write finished after ${this.usbErrors} USB error(s), now using ${this.blockSize} byte blocks`, 'WARN');
     }
 
     if (verify) {

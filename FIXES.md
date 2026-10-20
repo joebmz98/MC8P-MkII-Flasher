@@ -11,6 +11,28 @@ The new `index.html` + `dfuse.js` erase, write and read back every byte, and
 report real errors. They pass 16 automated tests against the same simulated
 bootloader (`node test/run-tests.js`).
 
+## Update after the first real-board test
+
+On a real board (Windows, Opera) the new flasher connected, read the flash
+layout and erased all 5 sectors. Then the first 2 KB write failed with
+"A transfer error has occurred". Short USB requests (commands, status reads)
+worked; the first long one did not. That points at the USB link, not the
+protocol: Betaflight's WebUSB flasher sends STM32 F4 writes the same way, also
+in 2 KB blocks.
+
+So the flasher now:
+
+* retries any failed transfer, then halves the block size if the same block
+  fails twice (2048, 1024, 512, ... down to 64 bytes) and carries on;
+* also retries erases and read-back;
+* logs every retry and the block size it settled on, plus the bootloader version;
+* gives a plain message if even 64 byte blocks fail (cable, port, powered hub);
+* accepts `?block=256` on the page URL to start with small blocks.
+
+Please send the new log either way. If it says "Write finished after N USB
+error(s), now using 512 byte blocks", the link really is the problem and a
+better cable or port will also make it faster.
+
 ## Bugs in the old flasher
 
 1. **Wrong erase command.** It sent `0x44 + sector number`. The STM32 bootloader's
