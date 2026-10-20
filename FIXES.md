@@ -8,30 +8,62 @@ simulated STM32F411 ROM bootloader, it left **97.5% of the bytes wrong** on a
 blank chip and spent about **18 minutes** stuck in polling loops.
 
 The new `index.html` + `dfuse.js` erase, write and read back every byte, and
-report real errors. They pass 16 automated tests against the same simulated
-bootloader (`node test/run-tests.js`).
+report real errors. They pass 24 automated tests against a simulated
+bootloader (`node test/run-tests.js`), including a model of the real board's
+fault described below.
 
-## Update after the first real-board test
+## What two real-board logs showed (Windows, Opera)
 
-On a real board (Windows, Opera) the new flasher connected, read the flash
-layout and erased all 5 sectors. Then the first 2 KB write failed with
-"A transfer error has occurred". Short USB requests (commands, status reads)
-worked; the first long one did not. That points at the USB link, not the
-protocol: Betaflight's WebUSB flasher sends STM32 F4 writes the same way, also
-in 2 KB blocks.
+**Log 1:** connected, read the layout, erased all 5 sectors, then the first
+2 KB write failed with "A transfer error has occurred".
 
-So the flasher now:
+**Log 2** (with retries and shrinking blocks): about 87% of the firmware went
+in. A few blocks failed once and then worked, but the 64 bytes at
+**0x08019740** failed every time, even alone. Those 64 bytes are:
 
-* retries any failed transfer, then halves the block size if the same block
-  fails twice (2048, 1024, 512, ... down to 64 bytes) and carries on;
-* also retries erases and read-back;
-* logs every retry and the block size it settled on, plus the bootloader version;
-* gives a plain message if even 64 byte blocks fail (cable, port, powered hub);
-* accepts `?block=256` on the page URL to start with small blocks.
+```
+ff ff ff ff ff ff ff ff ff e0 1c 00 7f 00 7f ff ...
+```
 
-Please send the new log either way. If it says "Write finished after N USB
-error(s), now using 512 byte blocks", the link really is the problem and a
-better cable or port will also make it faster.
+That is one of the two packets in the whole firmware with the longest run of
+1 bits (72 in a row; USB sends bytes lowest bit first). Every one of the 1,624
+packets that went through had runs of 25 bits or less. Packets that are mostly
+1 bits give the receiver very few signal edges to stay in sync with, so this
+is the classic sign of a USB clock that is slightly off. Short requests have
+no such runs, which is why they always worked.
+
+The HID bootloader and tinyuf2 (UF2) set the board's clocks up themselves from
+the 25 MHz crystal, and both of them carried this same firmware fine. Only the
+chip's built-in ROM bootloader has the problem. A likely reason (not
+confirmed): the ROM bootloader works out the crystal frequency using its own
+rough internal oscillator, and 25 MHz is near the top of the range it accepts.
+
+## What the flasher does about it now
+
+1. **Skips blank words.** Any 4 bytes equal to `FF FF FF FF` are not sent: the
+   erase already left them that way. This removes most long runs (the longest
+   run in any packet drops from 80 bits to 35).
+2. **Splits a failing block in half, again and again**, down to single bytes,
+   like a binary search. A long run then ends up spread over separate USB
+   packets, and each packet starts with a sync pattern the chip can lock onto.
+   As soon as the bad spot is past, full 2 KB blocks resume.
+3. **Retries everything** (erase, write, read back), logs each problem, and
+   only lowers the normal block size if full size blocks keep failing.
+4. **Verifies the bytes it wrote.** Blank areas were checked by the erase.
+
+In the simulation fitted to log 2 (packets with runs over 25 bits always fail,
+plus random packet errors at the rate in the log), the previous version gets
+stuck at 0x08019740 exactly like the real board, and this version flashes and
+verifies everything. It also succeeds every time across different random seeds
+and on a harsher model where runs over 20 bits fail.
+
+Expect some `WARN` lines in the log on this board; that is the flasher working
+around the problem. Please send the log either way.
+
+**If it still fails:** the fallback is UF2 (tinyuf2), which you already got
+working. It does not use the ROM bootloader's USB at all. The web page can
+still help there: offer the `.uf2` as a download and show "drag this onto the
+MC8P drive".
 
 ## Bugs in the old flasher
 

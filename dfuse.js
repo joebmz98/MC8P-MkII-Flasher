@@ -240,16 +240,26 @@ export const F411_LAYOUT = parseMemoryLayout('@Internal Flash  /0x08000000/04*01
 // The device
 // ====================================================================
 
-// Some boards (seen on a Black Pill clone) take short USB requests fine but fail
-// long ones with "A transfer error has occurred". A failed transfer is retried
-// at the same size once; if the same block fails again, blocks are halved
-// (down to MIN_BLOCK) until they get through. One-off glitches don't shrink it.
-const MIN_BLOCK = 64;
-const USB_RETRIES = 10;
+// On some Black Pill boards the ROM bootloader's USB receiver is marginal: it
+// cannot take packets containing long runs of 1 bits (e.g. 0xFF 0xFF 0xFF...),
+// which have few signal edges to stay in sync with. Seen on a real board: every
+// packet with runs up to 25 bits got through, one with a 72 bit run never did.
+// Two defences:
+//  1. Words that are 0xFFFFFFFF are not sent at all: erased flash already
+//     holds that value. This removes almost all long runs.
+//  2. A failed transfer is retried at the same size once. If it fails again,
+//     that block is split in half, and halves that fail are split again, down
+//     to single bytes, so a long run ends up spread over separate USB packets
+//     (each starts with a sync pattern). Once past the troublesome block,
+//     full size blocks resume. If failures keep starting at full size with
+//     nothing good in between, the full size itself is lowered.
+const MIN_BLOCK = 1;
+const USB_RETRIES = 24;
 const STATUS_RETRIES = 2;
+const ERASED_WORD = 0xffffffff;
 
 export class StmDfuse {
-  constructor(usbDevice, { log = () => {}, blockSize = 0 } = {}) {
+  constructor(usbDevice, { log = () => {}, blockSize = 0, skipErased = true, minBlock = MIN_BLOCK } = {}) {
     this.dev = usbDevice;
     this.log = log;
     this.iface = 0;
@@ -257,6 +267,14 @@ export class StmDfuse {
     this.transferSize = 2048;
     this.requestedBlockSize = blockSize;
     this.blockSize = 2048;
+    this.maxBlock = 2048;
+    this.minBlock = minBlock;
+    this.skipErased = skipErased;
+    this.troubleStart = 0;    // the block currently being split
+    this.troubleEnd = null;
+    this.cleanAtMax = 0;      // full size blocks that worked since the last trouble
+    this.hadTrouble = false;
+    this.backToBack = 0;
     this.layout = F411_LAYOUT;
     this.usbErrors = 0;
   }
@@ -288,10 +306,11 @@ export class StmDfuse {
     await dev.selectAlternateInterface(this.iface, this.alt);
 
     if (config && config.transferSize) this.transferSize = config.transferSize;
-    this.blockSize = this.transferSize;
-    if (this.requestedBlockSize > 0) {
-      this.blockSize = Math.max(MIN_BLOCK, Math.min(this.transferSize, this.requestedBlockSize));
-    }
+    // Blocks are powers of two so every block is aligned to its own size.
+    let limit = this.transferSize;
+    if (this.requestedBlockSize > 0) limit = Math.min(limit, this.requestedBlockSize);
+    this.maxBlock = 2 ** Math.floor(Math.log2(Math.max(this.minBlock, limit)));
+    this.blockSize = this.maxBlock;
     const layout = parseMemoryLayout(found.name);
     if (layout) this.layout = layout;
     else this.log(`Could not read the flash layout (${found.name || 'no name'}), assuming STM32F411.`, 'WARN');
@@ -475,7 +494,7 @@ export class StmDfuse {
 
   // Decide whether a failed write/read is worth another go, shrinking the
   // block size for USB-level failures. Throws when it is time to give up.
-  async retryOrThrow(e, attempt, what, shrink = true) {
+  async retryOrThrow(e, attempt, what, chunk = null) {
     const text = `${(e && e.name) || 'Error'}: ${(e && e.message) || e}`;
     if (e && e.name === 'NotFoundError') {
       throw new DfuError(`The board disconnected while ${what}. Check the cable and re-enter DFU mode.`);
@@ -491,14 +510,73 @@ export class StmDfuse {
       throw err;
     }
     this.log(`Problem while ${what}: ${text}`, 'WARN');
-    if (isUsb && shrink && attempt >= 2 && this.blockSize > MIN_BLOCK) {
-      this.blockSize = Math.max(MIN_BLOCK, this.blockSize >> 1);
+    if (isUsb && chunk && attempt >= 2 && this.blockSize > this.minBlock) {
+      if (this.troubleEnd === null) {
+        // A new troublesome block: split it, then return to full size after it.
+        this.troubleStart = chunk.addr;
+        this.troubleEnd = chunk.addr + chunk.length;
+        if (this.blockSize === this.maxBlock) {
+          this.backToBack = this.hadTrouble && this.cleanAtMax === 0 ? this.backToBack + 1 : 0;
+          this.hadTrouble = true;
+          if (this.backToBack >= 3 && this.maxBlock > this.minBlock) {
+            this.maxBlock >>= 1;
+            this.backToBack = 0;
+            this.log(`Full size blocks keep failing; using at most ${this.maxBlock} bytes from now on`, 'WARN');
+          }
+        }
+      }
+      this.blockSize = Math.max(this.minBlock, this.blockSize >> 1);
       this.log(`Retrying with ${this.blockSize} byte blocks`, 'WARN');
     } else {
       this.log(`Retrying (attempt ${attempt + 1})`, 'WARN');
     }
-    await sleep(50 * attempt);
+    await sleep(Math.min(50 * attempt, 300));
     await this.recover();
+  }
+
+  // Called after each good block. While splitting a block this is a binary
+  // search: after a piece gets through, the next piece is as big as its place
+  // in the split allows (so the half next to a bad spot is tried whole).
+  // Once past the block that was being split, go back to full size.
+  noteSuccess(nextAddr, n) {
+    if (n === this.maxBlock) this.cleanAtMax++;
+    if (this.troubleEnd === null) return;
+    if (nextAddr >= this.troubleEnd) {
+      this.troubleEnd = null;
+      this.cleanAtMax = 0;
+      this.blockSize = this.maxBlock;
+      return;
+    }
+    const rel = nextAddr - this.troubleStart;
+    this.blockSize = Math.min(this.maxBlock, rel & -rel);
+  }
+
+  // A new range starts somewhere else, so any split in progress no longer applies.
+  startRange() {
+    if (this.troubleEnd !== null) {
+      this.troubleEnd = null;
+      this.blockSize = this.maxBlock;
+    }
+  }
+
+  // Split data into the parts that actually need writing: words that are
+  // 0xFFFFFFFF are left out, because erased flash already reads 0xFFFFFFFF.
+  // Returns [{ offset, length }], all word aligned.
+  writeSpans(data) {
+    if (!this.skipErased) return [{ offset: 0, length: data.length }];
+    const dv = new DataView(data.buffer, data.byteOffset, data.byteLength);
+    const spans = [];
+    let start = -1;
+    for (let i = 0; i < data.length; i += 4) {
+      const blank = i + 4 <= data.length && dv.getUint32(i, true) === ERASED_WORD;
+      if (blank) {
+        if (start >= 0) { spans.push({ offset: start, length: i - start }); start = -1; }
+      } else if (start < 0) {
+        start = i;
+      }
+    }
+    if (start >= 0) spans.push({ offset: start, length: data.length - start });
+    return spans;
   }
 
   setAddress(addr) {
@@ -526,6 +604,7 @@ export class StmDfuse {
   async writeRange(addr, data, onBytes = () => {}) {
     let off = 0;
     let attempt = 0;
+    this.startRange();
     while (off < data.length) {
       const n = Math.min(this.blockSize, data.length - off);
       try {
@@ -533,8 +612,9 @@ export class StmDfuse {
         off += n;
         attempt = 0;
         onBytes(n);
+        this.noteSuccess(addr + off, n);
       } catch (e) {
-        await this.retryOrThrow(e, ++attempt, `writing ${n} bytes at ${hex32(addr + off)}`);
+        await this.retryOrThrow(e, ++attempt, `writing ${n} bytes at ${hex32(addr + off)}`, { addr: addr + off, length: n });
       }
     }
   }
@@ -555,6 +635,7 @@ export class StmDfuse {
     const out = new Uint8Array(length);
     let done = 0;
     let attempt = 0;
+    this.startRange();
     while (done < length) {
       const n = Math.min(this.blockSize, length - done);
       try {
@@ -562,8 +643,9 @@ export class StmDfuse {
         done += n;
         attempt = 0;
         onBytes(n);
+        this.noteSuccess(addr + done, n);
       } catch (e) {
-        await this.retryOrThrow(e, ++attempt, `reading ${n} bytes at ${hex32(addr + done)}`);
+        await this.retryOrThrow(e, ++attempt, `reading ${n} bytes at ${hex32(addr + done)}`, { addr: addr + done, length: n });
       }
     }
     await this.abort();
@@ -594,13 +676,24 @@ export class StmDfuse {
   async flash(image, { verify = true, onProgress = () => {} } = {}) {
     const segments = image.segments();
     const sectors = this.sectorsFor(segments);
-    const bytes = segments.reduce((n, s) => n + s.data.length, 0);
+
+    // What actually gets written: each segment minus its blank (0xFF) words.
+    const parts = [];
+    let total = 0;
+    for (const s of segments) {
+      for (const span of this.writeSpans(s.data)) {
+        parts.push({ seg: s, address: s.address + span.offset, data: s.data.subarray(span.offset, span.offset + span.length) });
+      }
+      total += s.data.length;
+    }
+    const written = parts.reduce((n, p) => n + p.data.length, 0);
+    const skipped = total - written;
 
     // Progress is weighted roughly by time: erase is slow, verify is fast.
-    const eraseWork = sectors.reduce((n, s) => n + s.size / 2, 0);
-    const total = eraseWork + bytes + (verify ? bytes / 4 : 0);
+    const eraseWork = sectors.reduce((n, sec) => n + sec.size / 2, 0);
+    const allWork = eraseWork + written + (verify ? written / 4 : 0);
     let work = 0;
-    const tick = (n, phase) => { work += n; onProgress(Math.min(1, work / total), phase); };
+    const tick = (n, phase) => { work += n; onProgress(Math.min(1, work / allWork), phase); };
 
     for (const sec of sectors) {
       this.log(`Erasing ${sec.size / 1024} KB sector at ${hex32(sec.start)}`);
@@ -609,29 +702,34 @@ export class StmDfuse {
           await this.eraseSector(sec.start);
           break;
         } catch (e) {
-          await this.retryOrThrow(e, attempt, `erasing ${hex32(sec.start)}`, false);
+          await this.retryOrThrow(e, attempt, `erasing ${hex32(sec.start)}`);
         }
       }
       tick(sec.size / 2, 'Erasing');
     }
 
-    for (const s of segments) {
-      this.log(`Writing ${s.data.length} bytes to ${hex32(s.address)} (${s.label})`);
-      await this.writeRange(s.address, s.data, (n) => tick(n, 'Writing'));
+    let lastSeg = null;
+    for (const p of parts) {
+      if (p.seg !== lastSeg) {
+        this.log(`Writing ${p.seg.data.length} bytes to ${hex32(p.seg.address)} (${p.seg.label})`);
+        lastSeg = p.seg;
+      }
+      await this.writeRange(p.address, p.data, (n) => tick(n, 'Writing'));
     }
+    if (skipped) this.log(`Skipped ${skipped} bytes that were 0xFF (already blank after erase)`);
     if (this.usbErrors) {
-      this.log(`Write finished after ${this.usbErrors} USB error(s), now using ${this.blockSize} byte blocks`, 'WARN');
+      this.log(`Write finished after ${this.usbErrors} USB error(s), all of them recovered`, 'WARN');
     }
 
     if (verify) {
-      await this.abort();
-      for (const s of segments) {
-        this.log(`Verifying ${s.data.length} bytes at ${hex32(s.address)}`);
-        const back = await this.read(s.address, s.data.length, (n) => tick(n / 4, 'Verifying'));
+      // Blank words were not written; the erase already made them 0xFF.
+      this.log(`Verifying the ${written} bytes written`);
+      for (const p of parts) {
+        const back = await this.read(p.address, p.data.length, (n) => tick(n / 4, 'Verifying'));
         for (let i = 0; i < back.length; i++) {
-          if (back[i] !== s.data[i]) {
+          if (back[i] !== p.data[i]) {
             throw new DfuError(
-              `Verify failed at ${hex32(s.address + i)}: wrote 0x${s.data[i].toString(16)}, read 0x${back[i].toString(16)}`
+              `Verify failed at ${hex32(p.address + i)}: wrote 0x${p.data[i].toString(16)}, read 0x${back[i].toString(16)}`
             );
           }
         }

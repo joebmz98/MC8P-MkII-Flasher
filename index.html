@@ -349,8 +349,8 @@
       <h3>Linux: the device appears but cannot be&nbsp;opened</h3>
       <p>Add a udev rule so your user can access it, for example <code>SUBSYSTEM=="usb", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="df11", MODE="0666"</code> in <code>/etc/udev/rules.d/50-stm32-dfu.rules</code>, then unplug and replug the&nbsp;board.</p>
 
-      <h3>"USB transfers keep failing" or "A transfer error has&nbsp;occurred"</h3>
-      <p>The flasher already retries with smaller USB blocks automatically. If it still fails, swap the cable, try another USB port or a powered USB hub, and unplug other USB devices. Adding <code>?block=256</code> to the page address starts with small blocks straight&nbsp;away.</p>
+      <h3>Warnings about "A transfer error has&nbsp;occurred"</h3>
+      <p>Some boards' built-in bootloader struggles with certain data patterns. The flasher works around this by itself: it skips blank data and resends any piece that fails in smaller parts, so a few warnings in the log are normal and the result is still checked byte by byte. If it gives up completely, try again or try another&nbsp;computer.</p>
 
       <h3>It flashed, but the controller does not&nbsp;start</h3>
       <p>Make sure BOOT0 is released, then press NRST or unplug and replug. If the LED next to the USB port keeps blinking quickly, the board has the old WeAct HID bootloader on it; press NRST once more. If it still does not start, click <em>Download Log</em> and send it to&nbsp;us.</p>
@@ -528,9 +528,8 @@
       }
       if (err && err.name === 'NotFoundError') return 'The board disconnected. Re-enter DFU mode and try again.';
       if (err && err.usbUnreliable) {
-        return 'The board answers short USB commands but keeps dropping data transfers, so the problem is the USB link, ' +
-          'not the firmware. Try another USB-C data cable, another USB port (a USB 2.0 port or a powered hub often helps), ' +
-          'unplug other USB devices, then re-enter DFU mode and flash again.';
+        return "The board's built-in bootloader could not receive part of the firmware, even one byte at a time. " +
+          'Re-enter DFU mode and try again, or try another computer. Please send the log (Download Log) if it keeps happening.';
       }
       return msg;
     }
