@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MC8P MkII Firmware Flasher | .axs instruments</title>
-  <script src="webdfu.js"></script>
+  <script src="webdfu.js?v=3.1"></script>
   <style>
     :root {
       --bg-color: #0d1117;
@@ -215,14 +215,11 @@
         const binaryBytes = new Uint8Array(arrayBuffer);
 
         const startAddress = 0x08004000;
-        statusDiv.innerText = "Erasing Sector 1 (0x08004000)...";
-        await dfu.eraseSector(startAddress);
-
         statusDiv.innerText = "Setting Flash Pointer to 0x08004000...";
         await dfu.setAddress(startAddress);
 
         const chunkSize = 1024;
-        let blockNum = 2;
+        let blockNum = 2; // DFU block 2 is the first payload block after setting address
 
         for (let offset = 0; offset < binaryBytes.length; offset += chunkSize) {
           const chunk = binaryBytes.slice(offset, offset + chunkSize);
