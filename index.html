@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MC8P MkII Firmware Flasher | .axs instruments</title>
+  <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+  <style>
+    :root {
+      --bg-color: #0d1117;
+      --card-bg: #161b22;
+      --border-color: #30363d;
+      --text-main: #c9d1d9;
+      --text-heading: #f0f6fc;
+      --text-muted: #8b949e;
+      --accent-blue: #2f81f7;
+      --accent-green: #238636;
+      --accent-green-hover: #2ea043;
+      --warning-bg: #271e13;
+      --warning-border: #845306;
+      --warning-text: #f2cc60;
+      --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      font-family: var(--font-family);
+      line-height: 1.6;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 680px;
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 32px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+
+    .header {
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 20px;
+      margin-bottom: 24px;
+    }
+
+    .brand {
+      font-size: 0.85rem;
+      font-weight: 600;
+      letter-spacing: 1.5px;
+      color: var(--accent-blue);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    h1 {
+      color: var(--text-heading);
+      font-size: 1.75rem;
+      font-weight: 600;
+    }
+
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      margin-top: 4px;
+    }
+
+    .badge-container {
+      display: flex;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .badge {
+      font-size: 0.75rem;
+      background: #21262d;
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 2px 8px;
+      border-radius: 6px;
+    }
+
+    .section {
+      margin-bottom: 24px;
+    }
+
+    .section-title {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text-heading);
+      margin-bottom: 12px;
+    }
+
+    ol {
+      padding-left: 20px;
+      color: var(--text-main);
+      font-size: 0.92rem;
+    }
+
+    li {
+      margin-bottom: 8px;
+    }
+
+    .warning-box {
+      background: var(--warning-bg);
+      border: 1px solid var(--warning-border);
+      color: var(--warning-text);
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 0.88rem;
+      margin-bottom: 24px;
+    }
+
+    .action-area {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      padding: 20px 0;
+      background: #0d1117;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      margin-bottom: 24px;
+    }
+
+    /* Direct styling targeting the standard WebUSB installer button */
+    esp-web-install-button {
+      --esp-tools-button-color: #ffffff;
+      --esp-tools-button-background-color: var(--accent-green);
+      --esp-tools-button-border-radius: 6px;
+    }
+
+    esp-web-install-button::part(button) {
+      background-color: var(--accent-green);
+      color: #ffffff;
+      border: 1px solid rgba(255,255,255,0.1);
+      padding: 12px 24px;
+      font-size: 1rem;
+      font-weight: 600;
+      font-family: var(--font-family);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background-color 0.15s ease, box-shadow 0.15s ease;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+
+    esp-web-install-button::part(button):hover {
+      background-color: var(--accent-green-hover);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    }
+
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #21262d;
+      color: var(--text-heading);
+      border: 1px solid var(--border-color);
+      padding: 8px 16px;
+      border-radius: 6px;
+      text-decoration: none;
+      font-size: 0.88rem;
+      font-weight: 500;
+      transition: background 0.15s ease;
+    }
+
+    .btn-secondary:hover {
+      background: #30363d;
+    }
+
+    .footer {
+      border-top: 1px solid var(--border-color);
+      padding-top: 16px;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .footer a {
+      color: var(--accent-blue);
+      text-decoration: none;
+    }
+
+    .footer a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <header class="header">
+      <div class="brand">.axs instruments</div>
+      <h1>MC8P MkII MIDI Controller</h1>
+      <p class="subtitle">Official WebUSB / HID Web Flashing Portal</p>
+      <div class="badge-container">
+        <span class="badge">Hardware: WeAct STM32F411 v3.0</span>
+        <span class="badge">Firmware: v3.1</span>
+      </div>
+    </header>
+
+    <div class="warning-box">
+      <strong>Requirements:</strong> Must use Google Chrome, Microsoft Edge, or Opera on Desktop. Connect your board using a USB-C data cable directly (avoid unshielded charge-only cables).
+    </div>
+
+    <section class="section">
+      <h2 class="section-title">Flashing Instructions</h2>
+      <ol>
+        <li>Connect your WeAct Blackpill board to your computer via USB-C.</li>
+        <li>Put board into HID Bootloader mode: press and hold <strong>BOOT0</strong>, press <strong>NRST</strong> once, then release <strong>BOOT0</strong>.</li>
+        <li>Click the <strong>Flash Firmware</strong> button below.</li>
+        <li>Select your STM32 HID / Serial device from the browser popup dialog and click <strong>Connect</strong>.</li>
+      </ol>
+    </section>
+
+    <div class="action-area">
+      <!-- Standard esp-web-install-button referencing local manifest -->
+      <esp-web-install-button manifest="manifest.json"></esp-web-install-button>
+      
+      <a href="https://youtu.be/ENxouRuxUlE" target="_blank" rel="noopener" class="btn-secondary">
+        📺 Watch Setup & Flashing Video Tutorial
+      </a>
+    </div>
+
+    <footer class="footer">
+      <div>&copy; .axs instruments. All rights reserved.</div>
+      <div>Target: STM32F411 (GenF4)</div>
+    </footer>
+  </div>
+
+</body>
+</html>
