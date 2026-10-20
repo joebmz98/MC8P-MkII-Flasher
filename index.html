@@ -322,20 +322,36 @@
 
       async pollUntilIdle() {
         let attempts = 0;
-        while (attempts < 50) {
-          await new Promise(r => setTimeout(r, 100)); // Delay to prevent flooding MCU during sector erase
-          const status = await this.getStatus();
-          const state = status[4];
-          
-          if (state === 2) { // dfuDNLOAD-IDLE
-            return;
-          }
-          if (state === 10) { // dfuERROR
-            await this.clearStatus();
-            return;
+        while (attempts < 100) {
+          await new Promise(r => setTimeout(r, 100));
+          try {
+            const status = await this.getStatus();
+            const state = status[4];
+            if (state === 2) return; // dfuDNLOAD-IDLE
+            if (state === 10) { // dfuERROR
+              await this.clearStatus();
+              return;
+            }
+          } catch (e) {
+            // Ignore transient control transfer polling hiccups during flash erase
           }
           attempts++;
         }
+      }
+
+      async eraseSector(sectorNum) {
+        // ST DFU Erase Command: 0x44 + Sector Byte
+        const cmd = new Uint8Array([0x44, sectorNum & 0xFF]);
+        await this.device.controlTransferOut({
+          requestType: 'class',
+          recipient: 'interface',
+          request: 1, // DFU_DNLOAD
+          value: 0,
+          index: this.ifaceNum
+        }, cmd);
+        
+        await new Promise(r => setTimeout(r, 200));
+        await this.pollUntilIdle();
       }
 
       async setAddress(address) {
@@ -348,8 +364,7 @@
           index: this.ifaceNum
         }, cmd);
         
-        // ST DFU protocol requires reading status twice after Set Address Pointer
-        await this.getStatus();
+        await new Promise(r => setTimeout(r, 100));
         await this.pollUntilIdle();
       }
 
@@ -362,7 +377,6 @@
           index: this.ifaceNum
         }, data);
         
-        await this.getStatus();
         await this.pollUntilIdle();
       }
     }
@@ -390,18 +404,15 @@
         log("Fetching manifest.json...");
         const manifestRes = await fetch('manifest.json?v=' + Date.now());
         const manifest = await manifestRes.json();
-        log("Manifest loaded successfully.");
 
         const hexPart = manifest.builds[0].parts.find(p => p.offset === "0x0");
         const binPart = manifest.builds[0].parts.find(p => p.offset === "0x4000");
 
-        log(`Fetching WeAct Bootloader from: ${hexPart.path}`);
         const hexRes = await fetch(hexPart.path + '?v=' + Date.now());
         const hexText = await hexRes.text();
         const bootloaderBytes = parseHexToBytes(hexText);
         log(`Parsed ${bootloaderBytes.length} bytes from bootloader .hex.`);
 
-        log(`Fetching Firmware Application from: ${binPart.path}`);
         const binRes = await fetch(binPart.path + '?v=' + Date.now());
         const binBuffer = await binRes.arrayBuffer();
         const appBytes = new Uint8Array(binBuffer);
@@ -417,6 +428,14 @@
         const dfuDriver = new NativeSTM32DFU(usbDevice);
         await dfuDriver.init();
         log("Claimed DFU interface successfully.");
+
+        log("Erasing Sector 0 (0x08000000)...");
+        await dfuDriver.eraseSector(0);
+        log("Sector 0 erased.");
+
+        log("Erasing Sector 1 (0x08004000)...");
+        await dfuDriver.eraseSector(1);
+        log("Sector 1 erased.");
 
         log("Setting Flash Memory Pointer to 0x08000000...");
         await dfuDriver.setAddress(0x08000000);
