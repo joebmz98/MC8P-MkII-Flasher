@@ -275,7 +275,6 @@
       return new Uint8Array(bytes);
     }
 
-    // Native WebUSB STM32 DFU Class Driver
     class NativeSTM32DFU {
       constructor(device) {
         this.device = device;
@@ -322,14 +321,20 @@
       }
 
       async pollUntilIdle() {
-        let status = await this.getStatus();
-        while (status[4] === 4 || status[4] === 5) { // dfuDNLOAD-BUSY or dfuMANIFEST-BUSY
-          const pollDelay = status[1] | (status[2] << 8) | (status[3] << 16);
-          await new Promise(r => setTimeout(r, Math.max(pollDelay, 10)));
-          status = await this.getStatus();
-        }
-        if (status[4] !== 2) { // dfuDNLOAD-IDLE
-          await this.clearStatus();
+        let attempts = 0;
+        while (attempts < 50) {
+          await new Promise(r => setTimeout(r, 100)); // Delay to prevent flooding MCU during sector erase
+          const status = await this.getStatus();
+          const state = status[4];
+          
+          if (state === 2) { // dfuDNLOAD-IDLE
+            return;
+          }
+          if (state === 10) { // dfuERROR
+            await this.clearStatus();
+            return;
+          }
+          attempts++;
         }
       }
 
@@ -342,6 +347,9 @@
           value: 0,
           index: this.ifaceNum
         }, cmd);
+        
+        // ST DFU protocol requires reading status twice after Set Address Pointer
+        await this.getStatus();
         await this.pollUntilIdle();
       }
 
@@ -353,6 +361,8 @@
           value: blockNum,
           index: this.ifaceNum
         }, data);
+        
+        await this.getStatus();
         await this.pollUntilIdle();
       }
     }
@@ -410,13 +420,13 @@
 
         log("Setting Flash Memory Pointer to 0x08000000...");
         await dfuDriver.setAddress(0x08000000);
-        log("Flash pointer set.");
+        log("Flash pointer set successfully.");
 
         log("Starting block-by-block DFU transfer...");
         statusDiv.innerText = `Flashing ${fullMemoryMap.length} bytes...`;
 
         const chunkSize = 1024;
-        let blockNum = 2; // Block 2 is first payload block following address pointer set
+        let blockNum = 2;
 
         for (let offset = 0; offset < fullMemoryMap.length; offset += chunkSize) {
           const chunk = fullMemoryMap.slice(offset, offset + chunkSize);
