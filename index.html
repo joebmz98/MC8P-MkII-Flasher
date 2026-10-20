@@ -148,24 +148,23 @@
     <header class="header">
       <div class="brand">.axs instruments</div>
       <h1>MC8P MkII MIDI Controller</h1>
-      <p class="subtitle">Official WebHID Firmware Flasher (HEX Engine)</p>
+      <p class="subtitle">Official WebUSB / DFU Flashing Portal</p>
       <div class="badge-container">
         <span class="badge">Hardware: WeAct STM32F411 v3.0</span>
-        <span class="badge">Firmware: v3.1 (.hex)</span>
+        <span class="badge">Firmware: v3.1</span>
       </div>
     </header>
 
     <div class="warning-box">
-      <strong>Requirements:</strong> Use Google Chrome or Microsoft Edge. Connect USB-C while holding the <strong>KEY button</strong> to enter WeAct Bootloader mode.
+      <strong>Requirements:</strong> Use Google Chrome or Microsoft Edge. Put the board into Factory DFU Mode by holding <strong>BOOT0</strong> during reset.
     </div>
 
     <section class="section">
       <h2 class="section-title">Flashing Instructions</h2>
       <ol>
-        <li>Unplug USB-C cable.</li>
-        <li>Press and hold the <strong>KEY</strong> button on the board.</li>
-        <li>Plug in USB-C while holding <strong>KEY</strong>, then release. The LED will pulse smoothly.</li>
-        <li>Click <strong>Flash Firmware</strong> and select <strong>WeAct STM32 HID Bootloader</strong>.</li>
+        <li>Connect board via USB-C.</li>
+        <li>Put into DFU bootloader mode: Hold <strong>BOOT0</strong>, press <strong>NRST</strong>, then release <strong>BOOT0</strong>.</li>
+        <li>Click <strong>Flash Firmware</strong> and select <strong>STM32 BOOTLOADER</strong> from the dialog.</li>
       </ol>
     </section>
 
@@ -180,7 +179,7 @@
 
     <footer class="footer">
       <div>&copy; .axs instruments. All rights reserved.</div>
-      <div>Target: WeAct STM32F411 BlackPill</div>
+      <div>Target: STM32F411 (GenF4)</div>
     </footer>
   </div>
 
@@ -188,26 +187,20 @@
     const flashBtn = document.getElementById('flashBtn');
     const statusDiv = document.getElementById('status');
 
-    // Intel HEX parser function
+    // Intel HEX parser for bootloader setup
     function parseHexToBytes(hexText) {
       const lines = hexText.split(/\r?\n/);
       let bytes = [];
-      let baseAddr = 0;
-
       for (const line of lines) {
         if (!line.startsWith(':')) continue;
         const len = parseInt(line.substr(1, 2), 16);
-        const addr = parseInt(line.substr(3, 4), 16);
         const type = parseInt(line.substr(7, 2), 16);
 
-        if (type === 0) { // Data Record
+        if (type === 0) { // Data record
           for (let i = 0; i < len; i++) {
-            const byteVal = parseInt(line.substr(9 + (i * 2), 2), 16);
-            bytes.push(byteVal);
+            bytes.push(parseInt(line.substr(9 + (i * 2), 2), 16));
           }
-        } else if (type === 4) { // Extended Linear Address Record
-          baseAddr = parseInt(line.substr(9, 4), 16) << 16;
-        } else if (type === 1) { // End of File
+        } else if (type === 1) { // EOF
           break;
         }
       }
@@ -215,57 +208,66 @@
     }
 
     flashBtn.addEventListener('click', async () => {
-      if (!navigator.hid) {
-        statusDiv.innerText = "Error: WebHID is not supported in this browser. Please use Chrome or Edge.";
+      if (!navigator.usb) {
+        statusDiv.innerText = "Error: WebUSB is not supported in this browser. Use Chrome or Edge.";
         return;
       }
 
       try {
         flashBtn.disabled = true;
-        statusDiv.innerText = "Requesting WeAct Bootloader Device...";
+        statusDiv.innerText = "Connecting to STM32 BOOTLOADER...";
 
-        const devices = await navigator.hid.requestDevice({
-          filters: [
-            { vendorId: 0x0483, productId: 0x572a },
-            { vendorId: 0x0483 }
-          ]
+        const device = await navigator.usb.requestDevice({
+          filters: [{ vendorId: 0x0483, productId: 0xdf11 }]
         });
 
-        if (devices.length === 0) {
-          statusDiv.innerText = "No device selected.";
-          flashBtn.disabled = false;
-          return;
-        }
-
-        const device = devices[0];
         await device.open();
-        statusDiv.innerText = "Connected! Downloading HEX file...";
+        await device.selectConfiguration(1);
+        await device.claimInterface(0);
+
+        statusDiv.innerText = "Connected! Fetching bootloader & firmware...";
 
         const manifestRes = await fetch('manifest.json?v=' + Date.now());
         const manifest = await manifestRes.json();
-        const hexPart = manifest.builds[0].parts.find(p => p.path.endsWith('.hex'));
 
+        const hexPart = manifest.builds[0].parts.find(p => p.offset === "0x0");
+        const binPart = manifest.builds[0].parts.find(p => p.offset === "0x4000");
+
+        // Fetch and parse WeAct Bootloader .hex
         const hexRes = await fetch(hexPart.path + '?v=' + Date.now());
         const hexText = await hexRes.text();
+        const bootloaderBytes = parseHexToBytes(hexText);
 
-        statusDiv.innerText = "Parsing Intel HEX data records...";
-        const binaryBytes = parseHexToBytes(hexText);
+        // Fetch Application .bin
+        const binRes = await fetch(binPart.path + '?v=' + Date.now());
+        const binBuffer = await binRes.arrayBuffer();
+        const appBytes = new Uint8Array(binBuffer);
 
-        statusDiv.innerText = `Flashing ${binaryBytes.length} bytes extracted from HEX...`;
+        // Combine Bootloader (0x0) + App Firmware (0x4000 offset = padding up to 16384 bytes)
+        const fullMemoryMap = new Uint8Array(0x4000 + appBytes.length);
+        fullMemoryMap.set(bootloaderBytes.subarray(0, 0x4000), 0);
+        fullMemoryMap.set(appBytes, 0x4000);
 
-        const packetSize = 64;
-        for (let i = 0; i < binaryBytes.length; i += packetSize) {
-          const chunk = binaryBytes.slice(i, i + packetSize);
-          const report = new Uint8Array(64);
-          report.set(chunk);
+        statusDiv.innerText = `Flashing ${fullMemoryMap.length} bytes (Bootloader + App Firmware)...`;
 
-          await device.sendReport(0, report);
+        // Flashing loop over WebUSB DFU interface
+        const chunkSize = 1024;
+        for (let offset = 0; offset < fullMemoryMap.length; offset += chunkSize) {
+          const chunk = fullMemoryMap.slice(offset, offset + chunkSize);
 
-          const percent = Math.round(((i + chunk.length) / binaryBytes.length) * 100);
-          statusDiv.innerText = `Flashing Firmware (.hex): ${percent}%`;
+          await device.controlTransferOut({
+            requestType: 'class',
+            recipient: 'interface',
+            request: 1, // DFU_DNLOAD
+            value: Math.floor(offset / chunkSize) + 2,
+            index: 0
+          }, chunk);
+
+          const percent = Math.round(((offset + chunk.length) / fullMemoryMap.length) * 100);
+          statusDiv.innerText = `Flashing Internal Flash: ${percent}%`;
         }
 
-        statusDiv.innerText = "Flash Successful! Disconnect and reconnect USB-C to launch.";
+        statusDiv.innerText = "Flash Complete! Unplug and replug your board to boot.";
         flashBtn.disabled = false;
 
       } catch (err) {

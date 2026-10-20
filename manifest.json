@@ -6,7 +6,11 @@
       "chipFamily": "STM32F411",
       "parts": [
         {
-          "path": "firmware/MC8P_MIDICONTROLLER_FIRMWARE_STM.ino.hex",
+          "path": "firmware/WeAct_HID_Bootloader_F4x1.hex",
+          "offset": "0x0"
+        },
+        {
+          "path": "firmware/MC8P_MIDICONTROLLER_FIRMWARE_STM.ino.bin",
           "offset": "0x4000"
         }
       ]
