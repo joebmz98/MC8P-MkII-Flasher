@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MC8P MkII Firmware Flasher | .axs instruments</title>
-  <script src="webdfu.js?v=3.1"></script>
   <style>
     :root {
       --bg-color: #0d1117;
@@ -115,6 +114,7 @@
     }
 
     .btn-primary:hover { background-color: var(--accent-green-hover); }
+    .btn-primary:disabled { background-color: #21262d; color: var(--text-muted); cursor: not-allowed; }
 
     .btn-secondary {
       display: inline-flex;
@@ -148,7 +148,7 @@
     <header class="header">
       <div class="brand">.axs instruments</div>
       <h1>MC8P MkII MIDI Controller</h1>
-      <p class="subtitle">Official WebUSB / DFU Flashing Portal</p>
+      <p class="subtitle">Official WebHID Firmware Flashing Portal</p>
       <div class="badge-container">
         <span class="badge">Hardware: WeAct STM32F411 v3.0</span>
         <span class="badge">Firmware: v3.1</span>
@@ -156,15 +156,16 @@
     </header>
 
     <div class="warning-box">
-      <strong>Requirements:</strong> Use Chrome or Edge. Ensure board is in DFU Mode (Hold BOOT0 during reset).
+      <strong>Requirements:</strong> Google Chrome or Microsoft Edge. Hold down the <strong>KEY button</strong> while connecting USB-C to enter WeAct Bootloader mode.
     </div>
 
     <section class="section">
       <h2 class="section-title">Flashing Instructions</h2>
       <ol>
-        <li>Connect board via USB-C.</li>
-        <li>Put into DFU bootloader mode: Hold <strong>BOOT0</strong>, press <strong>NRST</strong>, then release <strong>BOOT0</strong>.</li>
-        <li>Click <strong>Flash Firmware</strong> and select <strong>STM32 BOOTLOADER</strong> from the browser dialog.</li>
+        <li>Unplug USB-C cable.</li>
+        <li>Press and hold the <strong>KEY</strong> button (User Button) on the board.</li>
+        <li>Plug in USB-C while holding <strong>KEY</strong>, then release. The onboard LED will pulse smoothly.</li>
+        <li>Click <strong>Flash Firmware</strong> and select <strong>WeAct STM32 HID Bootloader</strong>.</li>
       </ol>
     </section>
 
@@ -179,7 +180,7 @@
 
     <footer class="footer">
       <div>&copy; .axs instruments. All rights reserved.</div>
-      <div>Target: STM32F411 (GenF4)</div>
+      <div>Target: WeAct STM32F411 BlackPill</div>
     </footer>
   </div>
 
@@ -188,48 +189,57 @@
     const statusDiv = document.getElementById('status');
 
     flashBtn.addEventListener('click', async () => {
-      if (!navigator.usb) {
-        statusDiv.innerText = "Error: WebUSB not supported in this browser. Use Chrome or Edge.";
+      if (!navigator.hid) {
+        statusDiv.innerText = "Error: WebHID is not supported in this browser. Please use Chrome or Edge.";
         return;
       }
 
       try {
         flashBtn.disabled = true;
-        statusDiv.innerText = "Connecting to USB Device...";
+        statusDiv.innerText = "Requesting WeAct Bootloader Device...";
 
-        const rawDevice = await navigator.usb.requestDevice({
-          filters: [{ vendorId: 0x0483, productId: 0xdf11 }]
+        // Match WeAct HID Bootloader (0x0483:0x572a) explicitly
+        const devices = await navigator.hid.requestDevice({
+          filters: [
+            { vendorId: 0x0483, productId: 0x572a },
+            { vendorId: 0x0483 }
+          ]
         });
 
-        const dfu = new WebDFU(rawDevice);
-        await dfu.connect();
+        if (devices.length === 0) {
+          statusDiv.innerText = "No device selected.";
+          flashBtn.disabled = false;
+          return;
+        }
 
-        statusDiv.innerText = "Connected! Downloading binary...";
+        const device = devices[0];
+        await device.open();
+        statusDiv.innerText = "Connected to WeAct Bootloader! Fetching firmware...";
 
-        const manifestRes = await fetch('manifest.json');
+        const manifestRes = await fetch('manifest.json?v=' + Date.now());
         const manifest = await manifestRes.json();
         const binPart = manifest.builds[0].parts.find(p => p.offset === "0x4000");
 
-        const binRes = await fetch(binPart.path);
+        const binRes = await fetch(binPart.path + '?v=' + Date.now());
         const arrayBuffer = await binRes.arrayBuffer();
         const binaryBytes = new Uint8Array(arrayBuffer);
 
-        const startAddress = 0x08004000;
-        statusDiv.innerText = "Setting Flash Pointer to 0x08004000...";
-        await dfu.setAddress(startAddress);
+        statusDiv.innerText = `Flashing ${binaryBytes.length} bytes to 0x4000...`;
 
-        const chunkSize = 1024;
-        let blockNum = 2; // DFU block 2 is the first payload block after setting address
+        // Packet size for WeAct HID Bootloader is 64 bytes
+        const packetSize = 64;
+        for (let i = 0; i < binaryBytes.length; i += packetSize) {
+          const chunk = binaryBytes.slice(i, i + packetSize);
+          const report = new Uint8Array(64);
+          report.set(chunk);
 
-        for (let offset = 0; offset < binaryBytes.length; offset += chunkSize) {
-          const chunk = binaryBytes.slice(offset, offset + chunkSize);
-          await dfu.writeBlock(blockNum++, chunk);
+          await device.sendReport(0, report);
 
-          const percent = Math.round(((offset + chunk.length) / binaryBytes.length) * 100);
-          statusDiv.innerText = `Flashing Internal Flash: ${percent}%`;
+          const percent = Math.round(((i + chunk.length) / binaryBytes.length) * 100);
+          statusDiv.innerText = `Flashing Firmware: ${percent}%`;
         }
 
-        statusDiv.innerText = "Flash Complete! Unplug and replug your board to reboot.";
+        statusDiv.innerText = "Flash Successful! Disconnect and reconnect USB-C to launch.";
         flashBtn.disabled = false;
 
       } catch (err) {
