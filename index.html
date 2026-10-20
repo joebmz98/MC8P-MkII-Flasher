@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MC8P MkII Firmware Flasher | .axs instruments</title>
-  <!-- Official WebDFU Library -->
   <script src="https://cdn.jsdelivr.net/npm/dfu-util-js@0.3.0/dfu-util.min.js"></script>
   <style>
     :root {
@@ -20,6 +19,7 @@
       --warning-bg: #271e13;
       --warning-border: #845306;
       --warning-text: #f2cc60;
+      --console-bg: #040d14;
       --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
 
@@ -129,9 +129,48 @@
       border-radius: 6px;
       text-decoration: none;
       font-size: 0.88rem;
+      cursor: pointer;
     }
 
+    .btn-secondary:hover { background: #30363d; }
+
     .status-text { font-size: 0.9rem; color: var(--text-muted); text-align: center; }
+
+    /* Console Styles */
+    .console-container {
+      margin-top: 20px;
+      width: 100%;
+      text-align: left;
+    }
+
+    .console-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .console-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .console-box {
+      background-color: var(--console-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 12px;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 0.8rem;
+      color: #58a6ff;
+      height: 180px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
 
     .footer {
       border-top: 1px solid var(--border-color);
@@ -173,8 +212,16 @@
     <div class="action-area">
       <button id="flashBtn" class="btn-primary">Flash Firmware</button>
       <div id="status" class="status-text">Ready to flash</div>
+
+      <div class="console-container">
+        <div class="console-header">
+          <span class="console-title">Live Debug Terminal</span>
+          <button id="downloadLogBtn" class="btn-secondary" style="padding: 4px 10px; font-size: 0.75rem;">📥 Download Log (.txt)</button>
+        </div>
+        <div id="consoleBox" class="console-box">[00:00:00] System initialized. Waiting for user action...\n</div>
+      </div>
       
-      <a href="https://youtu.be/ENxouRuxUlE" target="_blank" rel="noopener" class="btn-secondary">
+      <a href="https://youtu.be/ENxouRuxUlE" target="_blank" rel="noopener" class="btn-secondary" style="margin-top: 12px;">
         📺 Watch Setup & Flashing Video Tutorial
       </a>
     </div>
@@ -188,6 +235,28 @@
   <script>
     const flashBtn = document.getElementById('flashBtn');
     const statusDiv = document.getElementById('status');
+    const consoleBox = document.getElementById('consoleBox');
+    const downloadLogBtn = document.getElementById('downloadLogBtn');
+
+    let logHistory = [];
+
+    function log(message, type = "INFO") {
+      const time = new Date().toLocaleTimeString();
+      const formatted = `[${time}] [${type}] ${message}`;
+      logHistory.push(formatted);
+      consoleBox.innerText += formatted + "\n";
+      consoleBox.scrollTop = consoleBox.scrollHeight;
+    }
+
+    downloadLogBtn.addEventListener('click', () => {
+      const blob = new Blob([logHistory.join("\n")], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `mc8p-flasher-log-${Date.now()}.txt`;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
 
     function parseHexToBytes(hexText) {
       const lines = hexText.split(/\r?\n/);
@@ -210,41 +279,51 @@
 
     flashBtn.addEventListener('click', async () => {
       if (!navigator.usb) {
-        statusDiv.innerText = "Error: WebUSB is not supported in this browser. Use Chrome or Edge.";
+        const msg = "WebUSB is not supported in this browser. Use Chrome or Edge.";
+        statusDiv.innerText = `Error: ${msg}`;
+        log(msg, "ERROR");
         return;
       }
 
       try {
         flashBtn.disabled = true;
         statusDiv.innerText = "Connecting to STM32 BOOTLOADER...";
+        log("Requesting WebUSB device access (VendorID: 0x0483, ProductID: 0xDF11)...");
 
         const usbDevice = await navigator.usb.requestDevice({
           filters: [{ vendorId: 0x0483, productId: 0xdf11 }]
         });
 
+        log(`USB Device granted: ${usbDevice.productName || "STM32 BOOTLOADER"}`);
         statusDiv.innerText = "Connected! Fetching bootloader & firmware...";
 
+        log("Fetching manifest.json...");
         const manifestRes = await fetch('manifest.json?v=' + Date.now());
         const manifest = await manifestRes.json();
+        log("Manifest loaded successfully.");
 
         const hexPart = manifest.builds[0].parts.find(p => p.offset === "0x0");
         const binPart = manifest.builds[0].parts.find(p => p.offset === "0x4000");
 
+        log(`Fetching WeAct Bootloader from: ${hexPart.path}`);
         const hexRes = await fetch(hexPart.path + '?v=' + Date.now());
         const hexText = await hexRes.text();
         const bootloaderBytes = parseHexToBytes(hexText);
+        log(`Parsed ${bootloaderBytes.length} bytes from bootloader .hex.`);
 
+        log(`Fetching Firmware Application from: ${binPart.path}`);
         const binRes = await fetch(binPart.path + '?v=' + Date.now());
         const binBuffer = await binRes.arrayBuffer();
         const appBytes = new Uint8Array(binBuffer);
+        log(`Loaded ${appBytes.length} bytes from app .bin.`);
 
         const fullMemoryMap = new Uint8Array(0x4000 + appBytes.length);
         fullMemoryMap.set(bootloaderBytes.subarray(0, 0x4000), 0);
         fullMemoryMap.set(appBytes, 0x4000);
 
-        statusDiv.innerText = "Initializing WebDFU driver...";
+        log(`Stitching memory image (Total size: ${fullMemoryMap.length} bytes)...`);
+        log("Initializing WebDFU session instance...");
 
-        // Initialize standard WebDFU instance which handles state polling automatically
         const dfuDevice = new dfu.Device(usbDevice, {
           manifest: {
             transferSize: 1024,
@@ -253,19 +332,27 @@
         });
 
         await dfuDevice.open();
+        log("Opened WebDFU USB session successfully.");
 
         dfuDevice.logProgress = (done, total) => {
           const percent = Math.round((done / total) * 100);
           statusDiv.innerText = `Flashing Internal Flash: ${percent}%`;
+          if (percent % 20 === 0) {
+            log(`Flash progress: ${done}/${total} bytes (${percent}%)`);
+          }
         };
 
+        log("Executing Flash Write Sequence...");
         statusDiv.innerText = `Erasing & Flashing ${fullMemoryMap.length} bytes...`;
+        
         await dfuDevice.write(1024, fullMemoryMap.buffer, true);
 
+        log("Flash operation completed successfully!", "SUCCESS");
         statusDiv.innerText = "Flash Complete! Unplug and replug your board to boot.";
         flashBtn.disabled = false;
 
       } catch (err) {
+        log(`Unhandled exception: ${err.message || err}`, "ERROR");
         console.error(err);
         statusDiv.innerText = `Error: ${err.message || err}`;
         flashBtn.disabled = false;
