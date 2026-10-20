@@ -8,6 +8,7 @@ const DFU_DNLOAD = 1;
 const DFU_UPLOAD = 2;
 const DFU_GETSTATUS = 3;
 const DFU_CLRSTATUS = 4;
+const DFU_GETSTATE = 5;
 const DFU_ABORT = 6;
 
 const CMD_SET_ADDRESS = 0x21;
@@ -406,6 +407,12 @@ export class StmDfuse {
   clearStatus() { return this.requestOut(DFU_CLRSTATUS, 0); }
   abort() { return this.requestOut(DFU_ABORT, 0); }
 
+  // GETSTATE, unlike GETSTATUS, never makes the bootloader act on a pending block.
+  async getState() {
+    const dv = await this.requestIn(DFU_GETSTATE, 0, 1);
+    return dv.getUint8(0);
+  }
+
   // Bring the device to dfuIDLE whatever state an earlier attempt left it in.
   async resetState() {
     for (let i = 0; i < 4; i++) {
@@ -469,20 +476,26 @@ export class StmDfuse {
 
   // After a failed transfer the bootloader can be in almost any state. Get it
   // back to dfuIDLE, tolerating further USB errors on the way.
+  //
+  // Careful: the bootloader accepts a DNLOAD as soon as the request arrives, so
+  // when the data stops part way it sits in dfuDNLOAD-SYNC holding a block that
+  // is part new data, part left over from the previous one. A GETSTATUS now
+  // would make it program that block (and flash can't be un-written). So the
+  // state is read with GETSTATE and a pending block is thrown away with ABORT.
   async recover() {
     for (let i = 0; i < 20; i++) {
-      let st;
+      let state;
       try {
-        st = await this.getStatus();
+        state = await this.getState();
       } catch (e) {
         if (e && e.name === 'NotFoundError') throw e;
         await sleep(50);
         continue;
       }
       try {
-        if (st.state === STATE.dfuIDLE) return;
-        if (st.state === STATE.dfuERROR) await this.clearStatus();
-        else if (st.state === STATE.dfuDNBUSY || st.state === STATE.dfuDNLOAD_SYNC) await sleep(Math.max(st.pollTimeout, 10));
+        if (state === STATE.dfuIDLE) return;
+        if (state === STATE.dfuERROR) await this.clearStatus();
+        else if (state === STATE.dfuDNBUSY) await sleep(20); // finishing a complete block
         else await this.abort();
       } catch (e) {
         if (e && e.name === 'NotFoundError') throw e;
@@ -724,18 +737,58 @@ export class StmDfuse {
     if (verify) {
       // Blank words were not written; the erase already made them 0xFF.
       this.log(`Verifying the ${written} bytes written`);
-      for (const p of parts) {
-        const back = await this.read(p.address, p.data.length, (n) => tick(n / 4, 'Verifying'));
-        for (let i = 0; i < back.length; i++) {
-          if (back[i] !== p.data[i]) {
-            throw new DfuError(
-              `Verify failed at ${hex32(p.address + i)}: wrote 0x${p.data[i].toString(16)}, read 0x${back[i].toString(16)}`
-            );
+      let check = parts;
+      for (let pass = 1; ; pass++) {
+        const bad = await this.findMismatches(check, (n) => tick(n / 4, 'Verifying'));
+        if (!bad.count) break;
+        this.log(
+          `Verify found ${bad.count} wrong byte(s), first at ${hex32(bad.first.addr)} ` +
+          `(wrote 0x${bad.first.want.toString(16)}, read 0x${bad.first.got.toString(16)})`, 'WARN'
+        );
+        if (pass > 3) {
+          throw new DfuError(
+            `Verify failed: ${bad.count} byte(s) still wrong after ${pass - 1} repair attempt(s), ` +
+            `first at ${hex32(bad.first.addr)} (wrote 0x${bad.first.want.toString(16)}, read 0x${bad.first.got.toString(16)}).`
+          );
+        }
+        // Flash bits can only be cleared, so the only way to fix a wrong byte
+        // is to erase its whole sector and write that sector again.
+        const sectorsToRedo = bad.sectors;
+        this.log(`Repairing: erasing and rewriting ${sectorsToRedo.map((sec) => hex32(sec.start)).join(', ')}`, 'WARN');
+        for (const sec of sectorsToRedo) {
+          for (let attempt = 1; ; attempt++) {
+            try {
+              await this.eraseSector(sec.start);
+              break;
+            } catch (e) {
+              await this.retryOrThrow(e, attempt, `erasing ${hex32(sec.start)}`);
+            }
           }
         }
+        check = clipToSectors(parts, sectorsToRedo);
+        for (const p of check) await this.writeRange(p.address, p.data, (n) => tick(n, 'Repairing'));
       }
     }
     onProgress(1, 'Done');
+  }
+
+  // Read parts back; return how many bytes differ, the first one, and the
+  // sectors that contain differences.
+  async findMismatches(parts, onBytes) {
+    const out = { count: 0, first: null, sectors: [] };
+    for (const p of parts) {
+      const back = await this.read(p.address, p.data.length, onBytes);
+      for (let i = 0; i < back.length; i++) {
+        if (back[i] === p.data[i]) continue;
+        const addr = p.address + i;
+        out.count++;
+        if (!out.first) out.first = { addr, want: p.data[i], got: back[i] };
+        const sec = this.layout.sectors.find((x) => addr >= x.start && addr < x.start + x.size);
+        if (sec && !out.sectors.includes(sec)) out.sectors.push(sec);
+      }
+    }
+    out.sectors.sort((a, b) => a.start - b.start);
+    return out;
   }
 
   // Ask the ROM bootloader to jump to the firmware. The device disconnects,
@@ -746,6 +799,20 @@ export class StmDfuse {
     await this.requestOut(DFU_DNLOAD, 0, new Uint8Array(0));
     try { await this.getStatus(); } catch (e) { /* device has gone */ }
   }
+}
+
+// The pieces of `parts` that fall inside the given sectors.
+function clipToSectors(parts, sectors) {
+  const out = [];
+  for (const p of parts) {
+    const end = p.address + p.data.length;
+    for (const sec of sectors) {
+      const a = Math.max(p.address, sec.start);
+      const b = Math.min(end, sec.start + sec.size);
+      if (a < b) out.push({ ...p, address: a, data: p.data.subarray(a - p.address, b - p.address) });
+    }
+  }
+  return out.sort((x, y) => x.address - y.address);
 }
 
 function le32(cmd, addr) {

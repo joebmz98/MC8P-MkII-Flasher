@@ -8,7 +8,7 @@ simulated STM32F411 ROM bootloader, it left **97.5% of the bytes wrong** on a
 blank chip and spent about **18 minutes** stuck in polling loops.
 
 The new `index.html` + `dfuse.js` erase, write and read back every byte, and
-report real errors. They pass 24 automated tests against a simulated
+report real errors. They pass 26 automated tests against a simulated
 bootloader (`node test/run-tests.js`), including a model of the real board's
 fault described below.
 
@@ -38,6 +38,17 @@ chip's built-in ROM bootloader has the problem. A likely reason (not
 confirmed): the ROM bootloader works out the crystal frequency using its own
 rough internal oscillator, and 25 MHz is near the top of the range it accepts.
 
+**Log 3** (new cable, motherboard port): every write got through, but the
+read-back found a wrong byte at 0x08009400, right where a 1024 byte write had
+failed twice. ST's DFU code accepts a write request as soon as it arrives,
+before the data. When the data stops part way, the bootloader is left holding
+a block that is part new data and part leftovers from the previous block. The
+flasher's recovery then asked for the status (GETSTATUS), which in DFU means
+"go ahead", so that half block got programmed. Flash bits can only go from 1
+to 0, so the correct retry could not undo it. The read-back check caught it,
+which is what it is there for. The new cable made no real difference, which
+fits the theory above.
+
 ## What the flasher does about it now
 
 1. **Skips blank words.** Any 4 bytes equal to `FF FF FF FF` are not sent: the
@@ -47,15 +58,22 @@ rough internal oscillator, and 25 MHz is near the top of the range it accepts.
    like a binary search. A long run then ends up spread over separate USB
    packets, and each packet starts with a sync pattern the chip can lock onto.
    As soon as the bad spot is past, full 2 KB blocks resume.
-3. **Retries everything** (erase, write, read back), logs each problem, and
+3. **Throws away half-received blocks.** After a failed transfer it reads the
+   state with GETSTATE (which has no side effects) and cancels any pending
+   block with ABORT before doing anything else.
+4. **Retries everything** (erase, write, read back), logs each problem, and
    only lowers the normal block size if full size blocks keep failing.
-4. **Verifies the bytes it wrote.** Blank areas were checked by the erase.
+5. **Verifies, and repairs.** It reads back every byte it wrote (blank areas
+   were checked by the erase). If anything is wrong, it erases just the
+   affected sector(s), writes them again and re-checks, up to 3 times.
 
-In the simulation fitted to log 2 (packets with runs over 25 bits always fail,
-plus random packet errors at the rate in the log), the previous version gets
-stuck at 0x08019740 exactly like the real board, and this version flashes and
-verifies everything. It also succeeds every time across different random seeds
-and on a harsher model where runs over 20 bits fail.
+In the simulation fitted to the logs (packets with runs over 25 bits always
+fail, random packet errors at the logged rate, and half-received blocks left
+pending like ST's code does), the v2 settings get stuck at 0x08019740 and the
+v3 recovery produces a verify failure, both just like the real board. This
+version flashes and verifies everything, with no half block ever reaching
+flash. Even if the chip programmed half blocks by itself, the repair step
+erases and rewrites that sector and the result is still correct. 26 tests.
 
 Expect some `WARN` lines in the log on this board; that is the flasher working
 around the problem. Please send the log either way.
