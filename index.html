@@ -171,7 +171,7 @@
     </header>
 
     <div class="warning-box">
-      <strong>Requirements:</strong> Google Chrome or Microsoft Edge. Put board into ST DFU Mode (Hold BOOT0 during reset).
+      <strong>Requirements:</strong> Use Chrome or Edge. Ensure board is in DFU Mode (Hold BOOT0 during reset).
     </div>
 
     <section class="section">
@@ -210,46 +210,55 @@
 
       try {
         flashBtn.disabled = true;
-        statusDiv.innerText = "Requesting USB DFU Device...";
+        statusDiv.innerText = "Connecting to USB Device...";
         
-        // Request ST Factory DFU Mode (0x0483:0xdf11)
-        const device = await navigator.usb.requestDevice({
-          filters: [
-            { vendorId: 0x0483, productId: 0xdf11 },
-            { vendorId: 0x0483 }
-          ]
+        const rawDevice = await navigator.usb.requestDevice({
+          filters: [{ vendorId: 0x0483, productId: 0xdf11 }]
         });
 
-        statusDiv.innerText = `Connected to ${device.productName || "STM32 BOOTLOADER"}. Fetching manifest...`;
+        await rawDevice.open();
+        await rawDevice.selectConfiguration(1);
 
-        // Fetch manifest and binary path
+        // Fix for interface claim hang: Find internal flash interface (Interface 0, Alt 0)
+        let dfuInterface = null;
+        for (const iface of rawDevice.configuration.interfaces) {
+          for (const alt of iface.alternates) {
+            if (alt.interfaceClass === 0xFE && alt.interfaceSubclass === 0x01) {
+              dfuInterface = iface;
+              break;
+            }
+          }
+        }
+
+        if (dfuInterface) {
+          await rawDevice.claimInterface(dfuInterface.interfaceNumber);
+        } else {
+          await rawDevice.claimInterface(0);
+        }
+
+        statusDiv.innerText = "Connected! Fetching firmware binary...";
+
         const manifestRes = await fetch('manifest.json');
         const manifest = await manifestRes.json();
         const binPart = manifest.builds[0].parts.find(p => p.offset === "0x4000");
 
-        statusDiv.innerText = "Downloading firmware binary...";
         const binRes = await fetch(binPart.path);
         const arrayBuffer = await binRes.arrayBuffer();
 
-        statusDiv.innerText = "Initializing WebDFU session...";
+        statusDiv.innerText = "Initializing DFU flash transfer...";
 
-        // Set up DFU interface over WebUSB
-        const dfuDevice = new dfu.Device(device, {
+        const dfuDevice = new dfu.Device(rawDevice, {
           manifest: {
             transferSize: 1024,
-            startAddress: 0x08004000 // Flash at offset 0x4000 for vector alignment
+            startAddress: 0x08004000
           }
         });
 
-        await dfuDevice.open();
-        statusDiv.innerText = "Erasing and programming flash memory...";
-
         dfuDevice.logProgress = (done, total) => {
           const percent = Math.round((done / total) * 100);
-          statusDiv.innerText = `Flashing: ${percent}%`;
+          statusDiv.innerText = `Flashing Internal Flash: ${percent}%`;
         };
 
-        // Transfer image to STM32 internal flash
         await dfuDevice.write(1024, arrayBuffer, true);
 
         statusDiv.innerText = "Flash Complete! Unplug and replug your board to reboot.";
