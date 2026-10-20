@@ -111,10 +111,21 @@
       font-weight: 600;
       border-radius: 6px;
       cursor: pointer;
-      transition: background-color 0.15s ease;
+      transition: background-color 0.15s ease, box-shadow 0.15s ease;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
     }
 
-    .btn-primary:hover { background-color: var(--accent-green-hover); }
+    .btn-primary:hover {
+      background-color: var(--accent-green-hover);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    }
+
+    .btn-primary:disabled {
+      background-color: #21262d;
+      color: var(--text-muted);
+      cursor: not-allowed;
+      border-color: var(--border-color);
+    }
 
     .btn-secondary {
       display: inline-flex;
@@ -127,9 +138,23 @@
       border-radius: 6px;
       text-decoration: none;
       font-size: 0.88rem;
+      font-weight: 500;
+      transition: background 0.15s ease;
     }
 
-    .status-text { font-size: 0.9rem; color: var(--text-muted); }
+    .btn-secondary:hover { background: #30363d; }
+
+    .status-text { font-size: 0.9rem; color: var(--text-muted); text-align: center; }
+
+    .footer {
+      border-top: 1px solid var(--border-color);
+      padding-top: 16px;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
   </style>
 </head>
 <body>
@@ -146,7 +171,7 @@
     </header>
 
     <div class="warning-box">
-      <strong>Requirements:</strong> Use Chrome or Edge. Ensure board is in DFU Mode (BOOT0 held during reset).
+      <strong>Requirements:</strong> Google Chrome or Microsoft Edge. Put board into ST DFU Mode (Hold BOOT0 during reset).
     </div>
 
     <section class="section">
@@ -154,7 +179,7 @@
       <ol>
         <li>Connect board via USB-C.</li>
         <li>Put into DFU bootloader mode: Hold <strong>BOOT0</strong>, press <strong>NRST</strong>, then release <strong>BOOT0</strong>.</li>
-        <li>Click <strong>Flash Firmware</strong> and select <strong>STM32 BOOTLOADER</strong> from the browser window.</li>
+        <li>Click <strong>Flash Firmware</strong> and select <strong>STM32 BOOTLOADER</strong> from the browser dialog.</li>
       </ol>
     </section>
 
@@ -166,6 +191,11 @@
         📺 Watch Setup & Flashing Video Tutorial
       </a>
     </div>
+
+    <footer class="footer">
+      <div>&copy; .axs instruments. All rights reserved.</div>
+      <div>Target: STM32F411 (GenF4)</div>
+    </footer>
   </div>
 
   <script>
@@ -174,43 +204,61 @@
 
     flashBtn.addEventListener('click', async () => {
       if (!navigator.usb) {
-        statusDiv.innerText = "Error: WebUSB not supported in this browser. Use Chrome or Edge.";
+        statusDiv.innerText = "Error: WebUSB is not supported in this browser. Use Chrome or Edge.";
         return;
       }
 
       try {
-        statusDiv.innerText = "Requesting USB Device...";
+        flashBtn.disabled = true;
+        statusDiv.innerText = "Requesting USB DFU Device...";
         
-        // WebUSB filter specifically matching STM32 Factory DFU (0x0483:0xDF11)
+        // Request ST Factory DFU Mode (0x0483:0xdf11)
         const device = await navigator.usb.requestDevice({
-          filters: [{ vendorId: 0x0483, productId: 0xdf11 }]
+          filters: [
+            { vendorId: 0x0483, productId: 0xdf11 },
+            { vendorId: 0x0483 }
+          ]
         });
 
         statusDiv.innerText = `Connected to ${device.productName || "STM32 BOOTLOADER"}. Fetching manifest...`;
 
+        // Fetch manifest and binary path
         const manifestRes = await fetch('manifest.json');
         const manifest = await manifestRes.json();
-        const binPath = manifest.builds[0].parts.find(p => p.offset === "0x4000").path;
+        const binPart = manifest.builds[0].parts.find(p => p.offset === "0x4000");
 
-        statusDiv.innerText = "Downloading binary...";
-        const binRes = await fetch(binPath);
+        statusDiv.innerText = "Downloading firmware binary...";
+        const binRes = await fetch(binPart.path);
         const arrayBuffer = await binRes.arrayBuffer();
 
-        statusDiv.innerText = "Connecting WebDFU session...";
-        
-        // Connect using WebUSB DFU interface
-        await device.open();
-        await device.selectConfiguration(1);
-        await device.claimInterface(0);
+        statusDiv.innerText = "Initializing WebDFU session...";
 
-        statusDiv.innerText = "Flashing binary via DFU...";
-        
-        // Flash successfully verified
-        statusDiv.innerText = "Flashing initialized! Please authorize the USB interface transfer.";
+        // Set up DFU interface over WebUSB
+        const dfuDevice = new dfu.Device(device, {
+          manifest: {
+            transferSize: 1024,
+            startAddress: 0x08004000 // Flash at offset 0x4000 for vector alignment
+          }
+        });
+
+        await dfuDevice.open();
+        statusDiv.innerText = "Erasing and programming flash memory...";
+
+        dfuDevice.logProgress = (done, total) => {
+          const percent = Math.round((done / total) * 100);
+          statusDiv.innerText = `Flashing: ${percent}%`;
+        };
+
+        // Transfer image to STM32 internal flash
+        await dfuDevice.write(1024, arrayBuffer, true);
+
+        statusDiv.innerText = "Flash Complete! Unplug and replug your board to reboot.";
+        flashBtn.disabled = false;
 
       } catch (err) {
         console.error(err);
         statusDiv.innerText = `Error: ${err.message || err}`;
+        flashBtn.disabled = false;
       }
     });
   </script>
