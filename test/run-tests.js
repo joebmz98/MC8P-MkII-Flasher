@@ -11,8 +11,8 @@ import { MockStm32Dfu } from './mock-stm32-dfu.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const file = (p) => join(root, p);
-const appHex = readFileSync(file('firmware/MC8P_MIDICONTROLLER_FIRMWARE_STM.ino.hex'), 'utf8');
-const appBin = new Uint8Array(readFileSync(file('firmware/MC8P_MIDICONTROLLER_FIRMWARE_STM.ino.bin')));
+const appHex = readFileSync(file('test/fixtures/MC8P_MIDICONTROLLER_FIRMWARE_STM.ino.hex'), 'utf8');
+const appBin = new Uint8Array(readFileSync(file('test/fixtures/MC8P_MIDICONTROLLER_FIRMWARE_STM.ino.bin')));
 const blHex = readFileSync(file('firmware/WeAct_HID_Bootloader_F4x1.hex'), 'utf8');
 
 let passed = 0;

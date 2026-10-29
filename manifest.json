@@ -5,10 +5,8 @@
     {
       "chipFamily": "STM32F411",
       "parts": [
-        { "path": "firmware/WeAct_HID_Bootloader_F4x1.hex" },
-        { "path": "firmware/MC8P_MIDICONTROLLER_FIRMWARE_STM.ino.bin", "offset": "0x4000" }
-      ],
-      "note": "First start only: if the LED blinks quickly, press NRST once."
+        { "path": "firmware/MC8P_MIDICONTROLLER_FIRMWARE_STM.ino.hex" }
+      ]
     }
   ]
 }
