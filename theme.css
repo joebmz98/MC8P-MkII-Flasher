@@ -1,0 +1,216 @@
+/* MC8P web tools: shared 1-bit pixel theme (same file as the DCLK web tools).
+   Black and white only, like the DCLK / MC8P MkII front panels: white silkscreen
+   lines on black, stepped "pixel" corners, starfield dots, square-wave traces.
+   One art pixel = 2 CSS px. Fonts are sized on their own pixel grids so they stay
+   sharp: Alagard 32/64 px, Silkscreen 16/32 px. */
+
+@font-face { font-family: "Alagard"; src: url("assets/fonts/alagard.woff2") format("woff2"); font-display: swap; }
+@font-face { font-family: "Silkscreen"; src: url("assets/fonts/silkscreen-400.woff2") format("woff2"); font-display: swap; }
+@font-face { font-family: "Pixelify Sans"; font-weight: 400; src: url("assets/fonts/pixelify-sans-400.woff2") format("woff2"); font-display: swap; }
+@font-face { font-family: "Pixelify Sans"; font-weight: 600; src: url("assets/fonts/pixelify-sans-600.woff2") format("woff2"); font-display: swap; }
+@font-face { font-family: "VT323"; src: url("assets/fonts/vt323-400.woff2") format("woff2"); font-display: swap; }
+
+:root {
+  --ink: #fff;
+  --paper: #000;
+  --display: "Alagard", "Silkscreen", monospace;
+  --label: "Silkscreen", "VT323", monospace;
+  --body: "Pixelify Sans", "Silkscreen", system-ui, sans-serif;
+  --mono: "VT323", ui-monospace, monospace;
+  color-scheme: dark;
+
+  /* 9-slice frames, drawn on the 2 px grid: corners are 8 px (12 px for the double line) */
+  --px-frame: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' shape-rendering='crispEdges' fill='white'><rect x='6' y='0' width='8' height='2'/><rect x='4' y='2' width='2' height='2'/><rect x='14' y='2' width='2' height='2'/><rect x='2' y='4' width='2' height='2'/><rect x='16' y='4' width='2' height='2'/><rect x='0' y='6' width='2' height='2'/><rect x='18' y='6' width='2' height='2'/><rect x='0' y='8' width='2' height='2'/><rect x='18' y='8' width='2' height='2'/><rect x='0' y='10' width='2' height='2'/><rect x='18' y='10' width='2' height='2'/><rect x='0' y='12' width='2' height='2'/><rect x='18' y='12' width='2' height='2'/><rect x='2' y='14' width='2' height='2'/><rect x='16' y='14' width='2' height='2'/><rect x='4' y='16' width='2' height='2'/><rect x='14' y='16' width='2' height='2'/><rect x='6' y='18' width='8' height='2'/></svg>");
+  --px-fill: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' shape-rendering='crispEdges' fill='white'><rect x='6' y='0' width='8' height='2'/><rect x='4' y='2' width='12' height='2'/><rect x='2' y='4' width='16' height='2'/><rect x='0' y='6' width='20' height='2'/><rect x='0' y='8' width='20' height='2'/><rect x='0' y='10' width='20' height='2'/><rect x='0' y='12' width='20' height='2'/><rect x='2' y='14' width='16' height='2'/><rect x='4' y='16' width='12' height='2'/><rect x='6' y='18' width='8' height='2'/></svg>");
+  --px-dots: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' shape-rendering='crispEdges' fill='white'><rect x='8' y='0' width='2' height='2'/><rect x='12' y='0' width='2' height='2'/><rect x='14' y='2' width='2' height='2'/><rect x='16' y='4' width='2' height='2'/><rect x='18' y='6' width='2' height='2'/><rect x='0' y='8' width='2' height='2'/><rect x='18' y='10' width='2' height='2'/><rect x='0' y='12' width='2' height='2'/><rect x='2' y='14' width='2' height='2'/><rect x='4' y='16' width='2' height='2'/><rect x='6' y='18' width='2' height='2'/><rect x='10' y='18' width='2' height='2'/></svg>");
+  --px-double: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' shape-rendering='crispEdges' fill='white'><rect x='10' y='0' width='8' height='2'/><rect x='6' y='2' width='4' height='2'/><rect x='18' y='2' width='4' height='2'/><rect x='4' y='4' width='2' height='2'/><rect x='10' y='4' width='8' height='2'/><rect x='22' y='4' width='2' height='2'/><rect x='2' y='6' width='2' height='2'/><rect x='8' y='6' width='2' height='2'/><rect x='18' y='6' width='2' height='2'/><rect x='24' y='6' width='2' height='2'/><rect x='2' y='8' width='2' height='2'/><rect x='6' y='8' width='2' height='2'/><rect x='20' y='8' width='2' height='2'/><rect x='24' y='8' width='2' height='2'/><rect x='0' y='10' width='2' height='2'/><rect x='4' y='10' width='2' height='2'/><rect x='22' y='10' width='2' height='2'/><rect x='26' y='10' width='2' height='2'/><rect x='0' y='12' width='2' height='2'/><rect x='4' y='12' width='2' height='2'/><rect x='22' y='12' width='2' height='2'/><rect x='26' y='12' width='2' height='2'/><rect x='0' y='14' width='2' height='2'/><rect x='4' y='14' width='2' height='2'/><rect x='22' y='14' width='2' height='2'/><rect x='26' y='14' width='2' height='2'/><rect x='0' y='16' width='2' height='2'/><rect x='4' y='16' width='2' height='2'/><rect x='22' y='16' width='2' height='2'/><rect x='26' y='16' width='2' height='2'/><rect x='2' y='18' width='2' height='2'/><rect x='6' y='18' width='2' height='2'/><rect x='20' y='18' width='2' height='2'/><rect x='24' y='18' width='2' height='2'/><rect x='2' y='20' width='2' height='2'/><rect x='8' y='20' width='2' height='2'/><rect x='18' y='20' width='2' height='2'/><rect x='24' y='20' width='2' height='2'/><rect x='4' y='22' width='2' height='2'/><rect x='10' y='22' width='8' height='2'/><rect x='22' y='22' width='2' height='2'/><rect x='6' y='24' width='4' height='2'/><rect x='18' y='24' width='4' height='2'/><rect x='10' y='26' width='8' height='2'/></svg>");
+  --stars: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='640' height='640' shape-rendering='crispEdges' fill='white'><rect x='330' y='154' width='2' height='2'/><rect x='48' y='74' width='4' height='4'/><rect x='96' y='374' width='2' height='2'/><rect x='518' y='218' width='2' height='2'/><rect x='444' y='428' width='2' height='2'/><rect x='92' y='564' width='2' height='2'/><path d='M580 126h2v2h2v2h-2v2h-2v-2h-2v-2h2z'/><rect x='596' y='62' width='2' height='2'/><path d='M408 50h4v2h2v4h-2v2h-4v-2h-2v-4h2z'/><rect x='46' y='570' width='4' height='4'/><rect x='296' y='428' width='2' height='2'/><rect x='120' y='584' width='2' height='2'/><rect x='184' y='104' width='2' height='2'/><rect x='192' y='380' width='2' height='2'/><rect x='64' y='576' width='2' height='2'/><rect x='210' y='508' width='4' height='4'/><rect x='436' y='320' width='2' height='2'/><rect x='464' y='370' width='2' height='2'/><rect x='184' y='248' width='2' height='2'/><rect x='306' y='536' width='2' height='2'/><rect x='350' y='458' width='2' height='2'/><rect x='74' y='120' width='2' height='2'/><rect x='168' y='350' width='2' height='2'/><rect x='500' y='430' width='2' height='2'/><rect x='78' y='570' width='2' height='2'/><rect x='320' y='348' width='4' height='4'/><rect x='608' y='508' width='2' height='2'/><rect x='466' y='70' width='4' height='4'/><rect x='276' y='484' width='4' height='4'/><rect x='66' y='62' width='4' height='4'/><path d='M318 590h4v2h2v4h-2v2h-4v-2h-2v-4h2z'/><rect x='456' y='290' width='4' height='4'/><path d='M356 22h2v2h2v2h-2v2h-2v-2h-2v-2h2z'/><rect x='362' y='172' width='2' height='2'/><rect x='504' y='60' width='2' height='2'/><rect x='294' y='132' width='4' height='4'/><path d='M408 400h2v2h2v2h-2v2h-2v-2h-2v-2h2z'/><rect x='508' y='82' width='2' height='2'/><rect x='410' y='562' width='2' height='2'/><rect x='140' y='440' width='4' height='4'/><path d='M286 424h4v2h2v4h-2v2h-4v-2h-2v-4h2z'/><rect x='388' y='236' width='2' height='2'/><rect x='180' y='154' width='2' height='2'/><rect x='238' y='12' width='2' height='2'/><rect x='602' y='186' width='2' height='2'/><rect x='4' y='148' width='2' height='2'/><rect x='378' y='624' width='2' height='2'/><path d='M130 526h2v2h2v2h-2v2h-2v-2h-2v-2h2z'/><path d='M56 466h2v2h2v2h-2v2h-2v-2h-2v-2h2z'/><rect x='572' y='400' width='2' height='2'/><rect x='402' y='106' width='2' height='2'/><rect x='410' y='62' width='2' height='2'/><rect x='212' y='450' width='2' height='2'/><rect x='348' y='614' width='2' height='2'/><rect x='0' y='580' width='2' height='2'/><rect x='102' y='372' width='2' height='2'/><rect x='72' y='212' width='2' height='2'/><path d='M154 258h2v2h2v2h-2v2h-2v-2h-2v-2h2z'/><rect x='616' y='372' width='2' height='2'/><path d='M120 498h4v2h2v4h-2v2h-4v-2h-2v-4h2z'/><rect x='476' y='490' width='2' height='2'/><rect x='86' y='146' width='2' height='2'/><rect x='350' y='270' width='2' height='2'/><rect x='164' y='528' width='2' height='2'/><rect x='540' y='370' width='2' height='2'/><rect x='556' y='26' width='4' height='4'/><rect x='304' y='92' width='4' height='4'/><rect x='266' y='530' width='2' height='2'/><rect x='170' y='364' width='4' height='4'/><rect x='544' y='554' width='4' height='4'/></svg>");
+  --ring: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='72' height='72' shape-rendering='crispEdges' fill='white'><rect x='28' y='0' width='16' height='2'/><rect x='22' y='2' width='6' height='2'/><rect x='44' y='2' width='6' height='2'/><rect x='18' y='4' width='4' height='2'/><rect x='50' y='4' width='4' height='2'/><rect x='14' y='6' width='4' height='2'/><rect x='28' y='6' width='16' height='2'/><rect x='54' y='6' width='4' height='2'/><rect x='12' y='8' width='4' height='2'/><rect x='22' y='8' width='6' height='2'/><rect x='44' y='8' width='6' height='2'/><rect x='56' y='8' width='4' height='2'/><rect x='10' y='10' width='2' height='2'/><rect x='20' y='10' width='4' height='2'/><rect x='48' y='10' width='4' height='2'/><rect x='60' y='10' width='2' height='2'/><rect x='8' y='12' width='2' height='2'/><rect x='16' y='12' width='4' height='2'/><rect x='52' y='12' width='4' height='2'/><rect x='62' y='12' width='2' height='2'/><rect x='6' y='14' width='4' height='2'/><rect x='14' y='14' width='4' height='2'/><rect x='54' y='14' width='4' height='2'/><rect x='62' y='14' width='4' height='2'/><rect x='6' y='16' width='2' height='2'/><rect x='12' y='16' width='4' height='2'/><rect x='56' y='16' width='4' height='2'/><rect x='64' y='16' width='2' height='2'/><rect x='4' y='18' width='2' height='2'/><rect x='12' y='18' width='2' height='2'/><rect x='58' y='18' width='2' height='2'/><rect x='66' y='18' width='2' height='2'/><rect x='4' y='20' width='2' height='2'/><rect x='10' y='20' width='2' height='2'/><rect x='60' y='20' width='2' height='2'/><rect x='66' y='20' width='2' height='2'/><rect x='2' y='22' width='2' height='2'/><rect x='8' y='22' width='4' height='2'/><rect x='60' y='22' width='4' height='2'/><rect x='68' y='22' width='2' height='2'/><rect x='2' y='24' width='2' height='2'/><rect x='8' y='24' width='2' height='2'/><rect x='62' y='24' width='2' height='2'/><rect x='68' y='24' width='2' height='2'/><rect x='2' y='26' width='2' height='2'/><rect x='8' y='26' width='2' height='2'/><rect x='62' y='26' width='2' height='2'/><rect x='68' y='26' width='2' height='2'/><rect x='0' y='28' width='2' height='2'/><rect x='6' y='28' width='2' height='2'/><rect x='64' y='28' width='2' height='2'/><rect x='70' y='28' width='2' height='2'/><rect x='0' y='30' width='2' height='2'/><rect x='6' y='30' width='2' height='2'/><rect x='64' y='30' width='2' height='2'/><rect x='70' y='30' width='2' height='2'/><rect x='0' y='32' width='2' height='2'/><rect x='6' y='32' width='2' height='2'/><rect x='64' y='32' width='2' height='2'/><rect x='70' y='32' width='2' height='2'/><rect x='0' y='34' width='2' height='2'/><rect x='6' y='34' width='2' height='2'/><rect x='64' y='34' width='2' height='2'/><rect x='70' y='34' width='2' height='2'/><rect x='0' y='36' width='2' height='2'/><rect x='6' y='36' width='2' height='2'/><rect x='64' y='36' width='2' height='2'/><rect x='70' y='36' width='2' height='2'/><rect x='0' y='38' width='2' height='2'/><rect x='6' y='38' width='2' height='2'/><rect x='64' y='38' width='2' height='2'/><rect x='70' y='38' width='2' height='2'/><rect x='0' y='40' width='2' height='2'/><rect x='6' y='40' width='2' height='2'/><rect x='64' y='40' width='2' height='2'/><rect x='70' y='40' width='2' height='2'/><rect x='0' y='42' width='2' height='2'/><rect x='6' y='42' width='2' height='2'/><rect x='64' y='42' width='2' height='2'/><rect x='70' y='42' width='2' height='2'/><rect x='2' y='44' width='2' height='2'/><rect x='8' y='44' width='2' height='2'/><rect x='62' y='44' width='2' height='2'/><rect x='68' y='44' width='2' height='2'/><rect x='2' y='46' width='2' height='2'/><rect x='8' y='46' width='2' height='2'/><rect x='62' y='46' width='2' height='2'/><rect x='68' y='46' width='2' height='2'/><rect x='2' y='48' width='2' height='2'/><rect x='8' y='48' width='4' height='2'/><rect x='60' y='48' width='4' height='2'/><rect x='68' y='48' width='2' height='2'/><rect x='4' y='50' width='2' height='2'/><rect x='10' y='50' width='2' height='2'/><rect x='60' y='50' width='2' height='2'/><rect x='66' y='50' width='2' height='2'/><rect x='4' y='52' width='2' height='2'/><rect x='12' y='52' width='2' height='2'/><rect x='58' y='52' width='2' height='2'/><rect x='66' y='52' width='2' height='2'/><rect x='6' y='54' width='2' height='2'/><rect x='12' y='54' width='4' height='2'/><rect x='56' y='54' width='4' height='2'/><rect x='64' y='54' width='2' height='2'/><rect x='6' y='56' width='4' height='2'/><rect x='14' y='56' width='4' height='2'/><rect x='54' y='56' width='4' height='2'/><rect x='62' y='56' width='4' height='2'/><rect x='8' y='58' width='2' height='2'/><rect x='16' y='58' width='4' height='2'/><rect x='52' y='58' width='4' height='2'/><rect x='62' y='58' width='2' height='2'/><rect x='10' y='60' width='2' height='2'/><rect x='20' y='60' width='4' height='2'/><rect x='48' y='60' width='4' height='2'/><rect x='60' y='60' width='2' height='2'/><rect x='12' y='62' width='4' height='2'/><rect x='22' y='62' width='6' height='2'/><rect x='44' y='62' width='6' height='2'/><rect x='56' y='62' width='4' height='2'/><rect x='14' y='64' width='4' height='2'/><rect x='28' y='64' width='16' height='2'/><rect x='54' y='64' width='4' height='2'/><rect x='18' y='66' width='4' height='2'/><rect x='50' y='66' width='4' height='2'/><rect x='22' y='68' width='6' height='2'/><rect x='44' y='68' width='6' height='2'/><rect x='28' y='70' width='16' height='2'/></svg>");
+  --ring-fill: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='72' height='72' shape-rendering='crispEdges' fill='white'><rect x='28' y='0' width='16' height='2'/><rect x='22' y='2' width='6' height='2'/><rect x='44' y='2' width='6' height='2'/><rect x='18' y='4' width='4' height='2'/><rect x='50' y='4' width='4' height='2'/><rect x='14' y='6' width='4' height='2'/><rect x='28' y='6' width='16' height='2'/><rect x='54' y='6' width='4' height='2'/><rect x='12' y='8' width='4' height='2'/><rect x='22' y='8' width='28' height='2'/><rect x='56' y='8' width='4' height='2'/><rect x='10' y='10' width='2' height='2'/><rect x='20' y='10' width='32' height='2'/><rect x='60' y='10' width='2' height='2'/><rect x='8' y='12' width='2' height='2'/><rect x='16' y='12' width='40' height='2'/><rect x='62' y='12' width='2' height='2'/><rect x='6' y='14' width='4' height='2'/><rect x='14' y='14' width='44' height='2'/><rect x='62' y='14' width='4' height='2'/><rect x='6' y='16' width='2' height='2'/><rect x='12' y='16' width='48' height='2'/><rect x='64' y='16' width='2' height='2'/><rect x='4' y='18' width='2' height='2'/><rect x='12' y='18' width='48' height='2'/><rect x='66' y='18' width='2' height='2'/><rect x='4' y='20' width='2' height='2'/><rect x='10' y='20' width='52' height='2'/><rect x='66' y='20' width='2' height='2'/><rect x='2' y='22' width='2' height='2'/><rect x='8' y='22' width='56' height='2'/><rect x='68' y='22' width='2' height='2'/><rect x='2' y='24' width='2' height='2'/><rect x='8' y='24' width='56' height='2'/><rect x='68' y='24' width='2' height='2'/><rect x='2' y='26' width='2' height='2'/><rect x='8' y='26' width='56' height='2'/><rect x='68' y='26' width='2' height='2'/><rect x='0' y='28' width='2' height='2'/><rect x='6' y='28' width='60' height='2'/><rect x='70' y='28' width='2' height='2'/><rect x='0' y='30' width='2' height='2'/><rect x='6' y='30' width='60' height='2'/><rect x='70' y='30' width='2' height='2'/><rect x='0' y='32' width='2' height='2'/><rect x='6' y='32' width='60' height='2'/><rect x='70' y='32' width='2' height='2'/><rect x='0' y='34' width='2' height='2'/><rect x='6' y='34' width='60' height='2'/><rect x='70' y='34' width='2' height='2'/><rect x='0' y='36' width='2' height='2'/><rect x='6' y='36' width='60' height='2'/><rect x='70' y='36' width='2' height='2'/><rect x='0' y='38' width='2' height='2'/><rect x='6' y='38' width='60' height='2'/><rect x='70' y='38' width='2' height='2'/><rect x='0' y='40' width='2' height='2'/><rect x='6' y='40' width='60' height='2'/><rect x='70' y='40' width='2' height='2'/><rect x='0' y='42' width='2' height='2'/><rect x='6' y='42' width='60' height='2'/><rect x='70' y='42' width='2' height='2'/><rect x='2' y='44' width='2' height='2'/><rect x='8' y='44' width='56' height='2'/><rect x='68' y='44' width='2' height='2'/><rect x='2' y='46' width='2' height='2'/><rect x='8' y='46' width='56' height='2'/><rect x='68' y='46' width='2' height='2'/><rect x='2' y='48' width='2' height='2'/><rect x='8' y='48' width='56' height='2'/><rect x='68' y='48' width='2' height='2'/><rect x='4' y='50' width='2' height='2'/><rect x='10' y='50' width='52' height='2'/><rect x='66' y='50' width='2' height='2'/><rect x='4' y='52' width='2' height='2'/><rect x='12' y='52' width='48' height='2'/><rect x='66' y='52' width='2' height='2'/><rect x='6' y='54' width='2' height='2'/><rect x='12' y='54' width='48' height='2'/><rect x='64' y='54' width='2' height='2'/><rect x='6' y='56' width='4' height='2'/><rect x='14' y='56' width='44' height='2'/><rect x='62' y='56' width='4' height='2'/><rect x='8' y='58' width='2' height='2'/><rect x='16' y='58' width='40' height='2'/><rect x='62' y='58' width='2' height='2'/><rect x='10' y='60' width='2' height='2'/><rect x='20' y='60' width='32' height='2'/><rect x='60' y='60' width='2' height='2'/><rect x='12' y='62' width='4' height='2'/><rect x='22' y='62' width='28' height='2'/><rect x='56' y='62' width='4' height='2'/><rect x='14' y='64' width='4' height='2'/><rect x='28' y='64' width='16' height='2'/><rect x='54' y='64' width='4' height='2'/><rect x='18' y='66' width='4' height='2'/><rect x='50' y='66' width='4' height='2'/><rect x='22' y='68' width='6' height='2'/><rect x='44' y='68' width='6' height='2'/><rect x='28' y='70' width='16' height='2'/></svg>");
+  --wave: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' shape-rendering='crispEdges' fill='white'><rect x='8' y='0' width='10' height='2'/><rect x='8' y='2' width='2' height='2'/><rect x='16' y='2' width='2' height='2'/><rect x='8' y='4' width='2' height='2'/><rect x='16' y='4' width='2' height='2'/><rect x='8' y='6' width='2' height='2'/><rect x='16' y='6' width='2' height='2'/><rect x='8' y='8' width='2' height='2'/><rect x='16' y='8' width='2' height='2'/><rect x='8' y='10' width='2' height='2'/><rect x='16' y='10' width='2' height='2'/><rect x='8' y='12' width='2' height='2'/><rect x='16' y='12' width='2' height='2'/><rect x='8' y='14' width='2' height='2'/><rect x='16' y='14' width='2' height='2'/><rect x='8' y='16' width='2' height='2'/><rect x='16' y='16' width='2' height='2'/><rect x='8' y='18' width='2' height='2'/><rect x='16' y='18' width='2' height='2'/><rect x='8' y='20' width='2' height='2'/><rect x='16' y='20' width='2' height='2'/><rect x='0' y='22' width='10' height='2'/><rect x='16' y='22' width='8' height='2'/></svg>");
+  --tick: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='14' shape-rendering='crispEdges' fill='black'><rect x='12' y='2' width='4' height='2'/><rect x='10' y='4' width='4' height='2'/><rect x='0' y='6' width='4' height='2'/><rect x='8' y='6' width='4' height='2'/><rect x='2' y='8' width='8' height='2'/><rect x='4' y='10' width='4' height='2'/></svg>");
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { background: var(--paper); }
+body {
+  margin: 0;
+  background: var(--paper) var(--stars) repeat;
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 17px;
+  line-height: 1.5;
+  -webkit-font-smoothing: none;
+  -moz-osx-font-smoothing: grayscale;
+  padding-block: 40px 56px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+::selection { background: var(--ink); color: var(--paper); }
+img.px, canvas.px { image-rendering: pixelated; image-rendering: crisp-edges; }
+a { color: var(--ink); text-decoration-thickness: 2px; text-underline-offset: 3px; }
+a:hover { text-decoration-style: dotted; }
+:focus-visible { outline: 2px dashed var(--ink); outline-offset: 3px; }
+strong, b { font-weight: 600; }
+code {
+  font-family: var(--mono); font-size: 1.15em; padding: 0 4px;
+  background: var(--ink); color: var(--paper); overflow-wrap: anywhere;
+}
+
+/* ---------- frames ---------- */
+.frame  { border: 2px solid transparent; border-image: var(--px-frame) 8 / 8px round; }
+.frame-dots { border: 2px solid transparent; border-image: var(--px-dots) 8 / 8px round; }
+.frame-double { border: 2px solid transparent; border-image: var(--px-double) 12 / 12px round; }
+.frame-fill { border: 2px solid transparent; border-image: var(--px-fill) 8 fill / 8px round; color: var(--paper); }
+
+/* ---------- page shell: the "front panel" ---------- */
+.panel {
+  max-width: 800px;
+  margin: 0 auto;
+  background: var(--paper);
+  border: 2px solid transparent;
+  border-image: var(--px-frame) 8 / 8px round;
+  padding: 32px 36px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+@media (max-width: 560px) { .panel { padding: 22px 16px 20px; gap: 24px; } }
+
+/* ---------- header: wordmark, walker, clock trace ---------- */
+.plate { display: flex; flex-direction: column; gap: 0; }
+.back-link {
+  align-self: flex-start; margin-bottom: 18px;
+  font-family: var(--label); font-size: 16px; line-height: 1; text-transform: uppercase;
+  text-decoration: none; padding: 6px 0;
+}
+.back-link:hover { text-decoration: underline; text-decoration-style: solid; }
+.plate-top { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
+.wordmark { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding-bottom: 14px; }
+.brand { font-family: var(--label); font-size: 16px; line-height: 1; text-transform: lowercase; }
+.plate h1 { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; font-weight: 400; }
+.logo { font-family: var(--display); font-size: 96px; line-height: 0.8; letter-spacing: 2px; }
+.tool-tag {
+  font-family: var(--label); font-size: 16px; line-height: 1; text-transform: uppercase;
+  padding: 6px 10px; border: 2px solid transparent; border-image: var(--px-fill) 8 fill / 8px round; color: var(--paper);
+  position: relative; top: -10px;
+}
+.logo-sub { margin: 0; font-family: var(--display); font-size: 32px; line-height: 1; font-style: italic; text-transform: uppercase; letter-spacing: 1px; }
+@media (max-width: 560px) { .logo { font-size: 64px; } .logo-sub { font-size: 24px; } }
+
+.trace { display: flex; align-items: flex-end; height: 24px; }
+.trace > * { flex: none; }
+.trace .node { width: 8px; height: 8px; background: var(--ink); margin-bottom: -3px; clip-path: polygon(2px 0, 6px 0, 8px 2px, 8px 6px, 6px 8px, 2px 8px, 0 6px, 0 2px); }
+.trace .pulses { flex: 1 1 auto; height: 24px; background: var(--wave) repeat-x left bottom; }
+.trace .pulses.short { flex: 0 0 72px; }
+.trace .flat { height: 2px; background: var(--ink); flex: 0 0 24px; position: relative; }
+.trace .flat.grow { flex: 1 1 auto; }
+.trace .flat.end { flex: 0 0 48px; }
+.walker-spot { flex: 0 0 104px !important; }
+.walker {
+  position: absolute; bottom: 2px; left: 22px; width: 62px; height: 118px; display: block;
+  transform-origin: bottom center;
+}
+.walker.hop { transform: translateY(-4px); }
+@media (max-width: 560px) { .trace { margin-top: 44px; } .walker { width: 31px; height: 59px; left: 30px; } .walker-spot { flex-basis: 80px !important; } .trace .pulses.short { flex-basis: 36px; } }
+
+.sub { margin: 18px 0 0; max-width: 60ch; }
+
+/* ---------- buttons ---------- */
+button { font: inherit; color: inherit; cursor: pointer; }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font-family: var(--label); font-size: 16px; line-height: 1; text-transform: uppercase; text-decoration: none;
+  color: var(--ink); background: none;
+  border: 2px solid transparent; border-image: var(--px-frame) 8 / 8px round;
+  padding: 10px 16px 9px; min-height: 40px; white-space: nowrap;
+}
+.btn:hover:not(:disabled) { border-image: var(--px-fill) 8 fill / 8px round; color: var(--paper); }
+.btn:active:not(:disabled) { transform: translateY(2px); }
+.btn.primary { border-image: var(--px-fill) 8 fill / 8px round; color: var(--paper); }
+.btn.primary::before { content: ">"; width: 0; overflow: hidden; transition: width 80ms steps(2); }
+.btn.primary:hover:not(:disabled)::before, .btn.primary:focus-visible::before { width: 12px; }
+.btn.big { font-size: 32px; padding: 14px 28px 12px; min-height: 64px; }
+@media (max-width: 560px) { .btn.big { font-size: 16px; min-height: 52px; width: 100%; } }
+.btn:disabled { border-image: var(--px-dots) 8 / 8px round; color: var(--ink); opacity: 0.5; cursor: not-allowed; }
+.btn.danger.armed { border-image: var(--px-fill) 8 fill / 8px round; color: var(--paper); animation: px-blink 0.8s steps(1) infinite; }
+.btn.small { font-size: 16px; padding: 6px 10px 5px; min-height: 32px; }
+
+@keyframes px-blink { 0%, 60% { opacity: 1; } 61%, 100% { opacity: 0.35; } }
+
+/* ---------- section headings: Alagard with a silkscreen rule ---------- */
+.section-head {
+  display: flex; align-items: center; gap: 14px; margin: 0 0 10px;
+  font-family: var(--display); font-weight: 400; font-size: 32px; line-height: 1;
+}
+.section-head::after { content: ""; flex: 1; height: 2px; background: repeating-linear-gradient(90deg, var(--ink) 0 2px, transparent 2px 6px); }
+
+/* ---------- notices ---------- */
+.notice {
+  display: flex; gap: 12px; align-items: flex-start; padding: 12px 16px;
+  border: 2px solid transparent; border-image: var(--px-fill) 8 fill / 8px round; color: var(--paper);
+}
+.notice::before {
+  content: "!"; flex: none; font-family: var(--label); font-size: 16px; line-height: 1;
+  width: 24px; height: 24px; display: grid; place-items: center; background: var(--paper); color: var(--ink);
+  margin-top: 1px;
+}
+.notice a { color: var(--paper); }
+.callout { padding: 10px 14px; border: 2px solid transparent; border-image: var(--px-dots) 8 / 8px round; }
+
+/* ---------- chips ---------- */
+.chip {
+  display: inline-block; font-family: var(--label); font-size: 16px; line-height: 1; text-transform: uppercase;
+  padding: 5px 8px 4px; border: 2px solid transparent; border-image: var(--px-frame) 8 / 8px round; white-space: nowrap;
+}
+
+/* ---------- pixel LED (status square) ---------- */
+.led { width: 16px; height: 16px; flex: none; border: 2px solid var(--ink); background: transparent; }
+.led.on { background: var(--ink); }
+.led.demo { background: repeating-conic-gradient(var(--ink) 0 25%, transparent 0 50%) 0 0 / 4px 4px; }
+.led.err { background: var(--ink); animation: px-blink 0.5s steps(1) infinite; }
+.led.pending { background: repeating-conic-gradient(var(--ink) 0 25%, transparent 0 50%) 0 0 / 4px 4px; animation: px-blink 1s steps(1) infinite; }
+
+/* ---------- radios and checkboxes ---------- */
+input[type="checkbox"].px-check, input[type="radio"].px-radio {
+  appearance: none; -webkit-appearance: none; margin: 0; flex: none;
+  width: 20px; height: 20px; border: 2px solid var(--ink); background: var(--paper);
+  display: inline-grid; place-items: center; cursor: pointer;
+}
+input.px-radio { clip-path: polygon(2px 0, calc(100% - 2px) 0, 100% 2px, 100% calc(100% - 2px), calc(100% - 2px) 100%, 2px 100%, 0 calc(100% - 2px), 0 2px); }
+input.px-radio:checked { background: radial-gradient(var(--ink) 0 0) center / 8px 8px no-repeat; }
+input.px-check:checked { background: var(--ink) var(--tick) center / 16px 14px no-repeat; }
+input.px-check:focus-visible, input.px-radio:focus-visible { outline: 2px dashed var(--ink); outline-offset: 3px; }
+
+/* ---------- text fields ---------- */
+.field {
+  font-family: var(--mono); font-size: 24px; line-height: 1; color: var(--ink); background: var(--paper);
+  border: 2px solid transparent; border-image: var(--px-frame) 8 / 8px round; padding: 6px 10px; min-height: 40px;
+}
+.field:focus { outline: none; border-image: var(--px-double) 12 / 12px round; }
+
+/* ---------- disclosure ---------- */
+details.px-details { border-top: 2px solid var(--ink); padding-top: 14px; }
+details.px-details > summary {
+  list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px;
+  font-family: var(--label); font-size: 16px; line-height: 1; text-transform: uppercase; padding: 4px 0;
+}
+details.px-details > summary::-webkit-details-marker { display: none; }
+details.px-details > summary::before {
+  content: "+"; width: 20px; height: 20px; display: grid; place-items: center; flex: none;
+  border: 2px solid var(--ink); font-size: 16px; line-height: 1;
+}
+details.px-details[open] > summary::before { content: "-"; background: var(--ink); color: var(--paper); }
+details.px-details > summary:hover { text-decoration: underline; text-underline-offset: 4px; }
+
+/* ---------- footer ---------- */
+.foot {
+  display: flex; flex-wrap: wrap; gap: 8px 16px; justify-content: space-between; align-items: center;
+  font-family: var(--label); font-size: 16px; line-height: 1.3; text-transform: uppercase;
+  padding-top: 18px; border-top: 2px solid var(--ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

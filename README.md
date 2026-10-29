@@ -140,6 +140,8 @@ chip, not in the STM32's own flash, so flashing firmware never touches them.
 | --- | --- |
 | `index.html` | Start page (choose a tool) and the flasher, at `#flash` |
 | `editor.html` | MC8P Editor, including the demo device |
+| `theme.css` | 1-bit pixel theme (frames, buttons, fonts), the same file as the DCLK web tools |
+| `assets/fonts/` | Alagard, Silkscreen, Pixelify Sans and VT323, with `LICENSES.txt` |
 | `dfuse.js` | STM32 DfuSe over WebUSB: HEX/BIN parsing, erase, write, verify, start |
 | `manifest.json` | Version and firmware parts the "Latest release" option flashes |
 | `firmware/` | Release builds |

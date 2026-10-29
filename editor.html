@@ -5,255 +5,205 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>MC8P Editor</title>
 <meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preload" href="assets/fonts/alagard.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/silkscreen-400.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="theme.css">
 <style>
-  /* Layout: one centred card like the MC8P Web Flasher. The 8 knobs up top are laid
-     out like the panel (1-4 over 5-8); pick one to edit its messages below, the same
-     things the ASSIGN menu edits. Then scenes and panel settings, as in SETTINGS. */
-  :root {
-    --bg: #0d1117;
-    --card: #161b22;
-    --well: #0b0f14;
-    --raised: #21262d;
-    --line: #30363d;
-    --fg: #c9d1d9;
-    --head: #f0f6fc;
-    --muted: #8b949e;
-    --accent: #2f81f7;
-    --accent-soft: rgba(47,129,247,0.12);
-    --ok: #3fb950;
-    --warn: #f2cc60;
-    --warn-bg: #271e13;
-    --warn-line: #845306;
-    --bad: #f85149;
-    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-    color-scheme: dark;
-  }
+  /* Editor layout, on the shared 1-bit theme (theme.css). The top "deck" is the
+     MC8P front panel: 8 pixel knobs laid out 1-4 over 5-8, drawn on a 32x32 grid
+     at 2x so they sit on the same pixel grid as the frames. Pick one to edit its
+     messages below (the ASSIGN menu), then scenes and panel settings (SETTINGS). */
+  .panel { max-width: 920px; }
+  @media (max-width: 560px) { .trace { margin-top: 10px; } }   /* no walker sprite on MC8P */
 
-  * { box-sizing: border-box; }
-  [hidden] { display: none !important; }
-  body {
-    margin: 0;
-    background: var(--bg);
-    color: var(--fg);
-    font-family: var(--font);
-    font-size: 15px;
-    line-height: 1.55;
-    padding-block: 32px 48px;
-    padding-left: max(16px, env(safe-area-inset-left, 0px));
-    padding-right: max(16px, env(safe-area-inset-right, 0px));
-  }
-  .wrap {
-    max-width: 860px;
-    margin: 0 auto;
-    background: var(--card);
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-    padding: 28px;
-    display: flex;
-    flex-direction: column;
-    gap: 24px;
-  }
-  @media (max-width: 520px) { .wrap { padding: 20px 16px; } }
+  /* ---------- connection ---------- */
+  .conn { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 18px; padding: 14px 16px; }
+  .conn-status { display: flex; align-items: center; gap: 14px; flex: 1 1 260px; min-width: 0; }
+  .conn-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .conn-title { font-family: var(--label); font-size: 16px; line-height: 1.2; text-transform: uppercase; }
+  .conn-detail { font-size: 16px; line-height: 1.35; overflow-wrap: anywhere; }
+  .conn-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+  /* status square: same as theme .led, set by setConn() */
+  .dot { width: 16px; height: 16px; flex: none; border: 2px solid var(--ink); background: transparent; }
+  .dot.on { background: var(--ink); }
+  .dot.demo { background: repeating-conic-gradient(var(--ink) 0 25%, transparent 0 50%) 0 0 / 4px 4px; }
+  .dot.err { background: var(--ink); animation: px-blink 0.5s steps(1) infinite; }
 
-  header { display: flex; flex-direction: column; gap: 4px; padding-bottom: 20px; border-bottom: 1px solid var(--line); }
-  .back-link { align-self: flex-start; font-size: 0.88rem; color: var(--muted); text-decoration: none; margin-bottom: -12px; }
-  .back-link:hover { color: var(--accent); }
-  .brand { font-size: 0.8rem; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: var(--accent); }
-  h1 { margin: 0; color: var(--head); font-size: 1.75rem; font-weight: 600; text-wrap: balance; }
-  .sub { margin: 0; color: var(--muted); font-size: 0.95rem; }
-
-  /* ---------- connection bar ---------- */
-  .conn {
-    display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px;
-    padding: 14px 16px; background: var(--well); border: 1px solid var(--line); border-radius: 8px;
-  }
-  .conn-status { display: flex; align-items: center; gap: 10px; flex: 1 1 240px; min-width: 0; }
-  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
-  .dot.on { background: var(--ok); box-shadow: 0 0 0 3px rgba(63,185,80,0.2); }
-  .dot.demo { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-  .dot.err { background: var(--bad); }
-  .conn-text { display: flex; flex-direction: column; min-width: 0; }
-  .conn-title { color: var(--head); font-weight: 600; font-size: 0.95rem; }
-  .conn-detail { color: var(--muted); font-size: 0.82rem; overflow-wrap: anywhere; }
-  .conn-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-
-  button { font: inherit; cursor: pointer; }
-  .btn {
-    background: var(--raised); color: var(--head); border: 1px solid var(--line);
-    padding: 7px 14px; border-radius: 6px; font-size: 0.88rem; font-weight: 500;
-  }
-  .btn:hover:not(:disabled) { background: #30363d; }
-  .btn.primary { background: #238636; border-color: rgba(255,255,255,0.1); color: #fff; font-weight: 600; }
-  .btn.primary:hover:not(:disabled) { background: #2ea043; }
-  .btn.danger { color: var(--bad); }
-  .btn.danger.armed { background: var(--bad); color: #fff; border-color: var(--bad); }
-  .btn.small { padding: 4px 10px; font-size: 0.82rem; }
-  .btn.icon { width: 30px; height: 30px; padding: 0; display: inline-grid; place-items: center; color: var(--muted); }
-  .btn.icon:hover:not(:disabled) { color: var(--bad); }
-  .btn:disabled { color: var(--muted); cursor: not-allowed; opacity: 0.7; }
-  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-
-  .notice {
-    padding: 12px 16px; border-radius: 8px; font-size: 0.88rem;
-    background: var(--warn-bg); border: 1px solid var(--warn-line); color: var(--warn);
-  }
-  .notice a { color: inherit; }
-  .callout { font-size: 0.85rem; color: var(--fg); background: var(--accent-soft); border: 1px solid rgba(47,129,247,0.35); border-radius: 6px; padding: 8px 12px; }
-
-  /* ---------- panel: 8 knobs ---------- */
-  .panel {
-    background: var(--well); border: 1px solid var(--line); border-radius: 10px;
-    padding: 18px 16px 14px; display: flex; flex-direction: column; gap: 12px;
-  }
+  /* ---------- deck: the 8 knobs ---------- */
+  .deck { padding: 18px 16px 14px; display: flex; flex-direction: column; gap: 14px; }
   .knobs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
   .knob {
-    position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px;
-    padding: 10px 4px 8px; border-radius: 8px; border: 1px solid transparent;
-    background: transparent; color: var(--fg); min-width: 0;
+    position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px;
+    padding: 12px 4px 10px; min-width: 0; color: var(--ink); background: none;
+    border: 2px solid transparent; border-image: none;
     touch-action: none;
   }
-  .knob:hover { background: var(--raised); }
-  .knob[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
-  .knob svg { width: 64px; height: 64px; display: block; }
-  .knob .k-track { stroke: var(--line); }
-  .knob .k-arc { stroke: var(--accent); }
-  .knob .k-body { fill: var(--raised); stroke: #3d444d; }
-  .knob .k-tick { stroke: var(--head); }
-  .knob .k-num { fill: var(--head); font: 600 13px var(--font); }
-  .k-sum { font-family: var(--mono); font-size: clamp(0.62rem, 2.6vw, 0.74rem); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-  .knob[aria-pressed="true"] .k-sum { color: var(--fg); }
+  .knob:hover { border-image: var(--px-dots) 8 / 8px round; }
+  .knob[aria-pressed="true"] { border-image: var(--px-fill) 8 fill / 8px round; color: var(--paper); }
+  .knob canvas { width: 64px; height: 64px; display: block; }
+  .k-num { font-family: var(--label); font-size: 16px; line-height: 1; }
+  .k-sum { font-family: var(--mono); font-size: 20px; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
   .k-tag {
-    position: absolute; top: 6px; right: 6px; font-size: 0.62rem; font-weight: 700; letter-spacing: 0.6px;
-    color: var(--warn); border: 1px solid var(--warn-line); border-radius: 4px; padding: 0 4px; line-height: 1.5;
+    position: absolute; top: 8px; right: 8px; font-family: var(--label); font-size: 16px; line-height: 1;
+    padding: 3px 4px 2px; background: var(--ink); color: var(--paper);
   }
-  @media (max-width: 520px) { .knob svg { width: 52px; height: 52px; } .k-tag { top: 3px; right: 3px; } }
-  .panel-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; font-size: 0.82rem; color: var(--muted); }
-  .badge { font-size: 0.75rem; font-weight: 600; color: var(--warn); }
+  .knob[aria-pressed="true"] .k-tag { background: var(--paper); color: var(--ink); }
+  @media (max-width: 560px) {
+    .knobs { gap: 6px; }
+    .knob canvas { width: 48px; height: 48px; }
+    .k-sum { font-size: 16px; }
+    .k-tag { top: 4px; right: 4px; padding: 2px 3px 1px; font-size: 8px; }
+  }
+  .deck-foot {
+    display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; font-size: 16px;
+    padding-top: 10px; background: repeating-linear-gradient(90deg, var(--ink) 0 2px, transparent 2px 6px) top left / 100% 2px no-repeat;
+  }
+  #panelState { font-family: var(--label); text-transform: uppercase; }
 
-  /* ---------- sections ---------- */
+  /* ---------- settings ---------- */
   fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
-  fieldset:disabled .group { opacity: 0.55; }
-  .groups { display: flex; flex-direction: column; gap: 28px; }
-  .group { display: flex; flex-direction: column; gap: 4px; }
-  .group-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; margin-bottom: 6px; }
-  .group-title {
-    margin: 0; font-size: 0.78rem; font-weight: 600; color: var(--muted);
-    text-transform: uppercase; letter-spacing: 0.8px;
-  }
-  .group-title strong { color: var(--head); font-size: 1rem; letter-spacing: 0.4px; margin-left: 6px; }
+  fieldset:disabled .group, fieldset:disabled .extras { opacity: 0.45; }
+  .groups { display: flex; flex-direction: column; gap: 32px; }
+  .group { display: flex; flex-direction: column; }
+  .group-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; }
+  .group-head .section-head { margin: 0; }
   .row {
-    display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 20px; align-items: center;
-    padding: 12px 0; border-top: 1px solid var(--line);
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 24px; align-items: center;
+    padding: 16px 0;
+    background: repeating-linear-gradient(90deg, var(--ink) 0 2px, transparent 2px 6px) top left / 100% 2px no-repeat;
   }
-  .group .row:first-of-type { border-top: 0; padding-top: 4px; }
+  .group .row:first-of-type { background: none; padding-top: 6px; }
   .row > .ctl { justify-self: end; }
-  @media (max-width: 600px) { .row { grid-template-columns: 1fr; } .row > .ctl { justify-self: start; } }
-  .label { color: var(--head); font-weight: 500; font-size: 0.95rem; }
-  .hint { color: var(--muted); font-size: 0.83rem; }
-  .panel-name { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; margin-left: 6px; white-space: nowrap; }
+  @media (max-width: 680px) { .row { grid-template-columns: 1fr; } .row > .ctl { justify-self: start; } .seg { justify-content: flex-start; } }
+  .label { font-weight: 600; font-size: 18px; line-height: 1.3; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+  .hint { font-size: 16px; line-height: 1.4; margin-top: 4px; max-width: 52ch; }
+  .panel-name { font-weight: 400; }
 
-  .seg { display: inline-flex; flex-wrap: wrap; background: var(--well); border: 1px solid var(--line); border-radius: 7px; padding: 3px; gap: 2px; }
+  /* segmented choices: dotted outline, filled when chosen */
+  .seg { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
   .seg label { position: relative; }
   .seg input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
   .seg span {
-    display: block; padding: 5px 12px; border-radius: 5px; font-size: 0.86rem; color: var(--fg);
-    font-variant-numeric: tabular-nums; white-space: nowrap;
+    display: block; min-width: 44px; padding: 10px 11px 9px; text-align: center;
+    font-family: var(--label); font-size: 16px; line-height: 1; text-transform: uppercase; white-space: nowrap;
+    border: 2px solid transparent; border-image: var(--px-dots) 8 / 8px round;
   }
-  .seg.tight span { padding: 4px 8px; font-family: var(--mono); font-size: 0.78rem; }
-  .seg input:checked + span { background: var(--accent); color: #fff; font-weight: 600; }
-  .seg input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 1px; }
-  .seg input:disabled + span { color: var(--muted); }
-  .seg label:hover input:not(:checked):not(:disabled) + span { background: var(--raised); }
+  .seg.tight { gap: 4px; }
+  .seg.tight span { min-width: 36px; padding: 8px 7px 7px; }
+  .seg label:hover input:not(:checked):not(:disabled) + span { border-image: var(--px-frame) 8 / 8px round; }
+  .seg input:checked + span { border-image: var(--px-fill) 8 fill / 8px round; color: var(--paper); }
+  .seg input:focus-visible + span { outline: 2px dashed var(--ink); outline-offset: 3px; }
+  .seg input:disabled + span { opacity: 0.4; text-decoration: line-through; text-decoration-thickness: 2px; }
 
-  .switch { position: relative; display: inline-flex; align-items: center; gap: 10px; cursor: pointer; font-size: 0.88rem; }
+  .switch { position: relative; display: inline-flex; align-items: center; gap: 12px; cursor: pointer; font-family: var(--label); font-size: 16px; line-height: 1; text-transform: uppercase; }
   .switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
-  .switch .track { width: 40px; height: 22px; border-radius: 11px; background: var(--raised); border: 1px solid var(--line); position: relative; transition: background 0.15s; }
-  .switch .track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--muted); transition: transform 0.15s, background 0.15s; }
-  .switch input:checked + .track { background: var(--accent); border-color: var(--accent); }
-  .switch input:checked + .track::after { transform: translateX(18px); background: #fff; }
-  .switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .switch .track { width: 56px; height: 32px; position: relative; border: 2px solid transparent; border-image: var(--px-frame) 8 / 8px round; }
+  .switch .track::after { content: ""; position: absolute; top: 6px; left: 6px; width: 16px; height: 16px; background: var(--ink); transition: transform 90ms steps(3); }
+  .switch input:checked + .track { border-image: var(--px-fill) 8 fill / 8px round; }
+  .switch input:checked + .track::after { background: var(--paper); transform: translateX(24px); }
+  .switch input:focus-visible + .track { outline: 2px dashed var(--ink); outline-offset: 3px; }
+  #invText { min-width: 3ch; }
 
+  /* number boxes and drop-downs: VT323 on a pixel frame, like theme .field */
   input[type="number"], select {
-    background: var(--well); color: var(--head); border: 1px solid var(--line);
-    border-radius: 6px; padding: 5px 8px; font-family: var(--mono); font-size: 0.9rem; min-width: 0;
+    font-family: var(--mono); font-size: 24px; line-height: 1; color: var(--ink); background-color: var(--paper);
+    border: 2px solid transparent; border-image: var(--px-frame) 8 / 8px round; border-radius: 0;
+    padding: 6px 10px 5px; min-height: 40px; min-width: 0;
   }
-  input[type="number"] { width: 64px; text-align: right; }
-  select { padding-right: 4px; }
-  input:disabled, select:disabled { color: var(--muted); }
+  input[type="number"] { width: 72px; text-align: right; -moz-appearance: textfield; }
+  input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  select {
+    -webkit-appearance: none; appearance: none; cursor: pointer; padding-right: 32px;
+    background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='6' shape-rendering='crispEdges' fill='white'><rect width='12' height='2'/><rect x='2' y='2' width='8' height='2'/><rect x='4' y='4' width='4' height='2'/></svg>");
+    background-repeat: no-repeat; background-position: right 12px center; background-size: 12px 6px;
+  }
+  select option { background: var(--paper); color: var(--ink); }
+  input[type="number"]:focus, select:focus { outline: none; border-image: var(--px-double) 12 / 12px round; }
+  input:disabled, select:disabled { opacity: 0.5; cursor: not-allowed; }
 
   /* ---------- message list ---------- */
   .msgs { display: flex; flex-direction: column; gap: 8px; }
   .msg-head, .msg {
     display: grid;
-    grid-template-columns: 28px 92px minmax(150px, 1.2fr) 172px 136px 88px 30px;
+    grid-template-columns: 28px 104px minmax(96px, 1fr) auto 152px 92px 36px;
     gap: 10px; align-items: center;
   }
-  .msg-head { font-size: 0.74rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; padding: 0 12px; }
-  .msg { background: var(--well); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
-  .msg-n { font-family: var(--mono); color: var(--muted); font-size: 0.85rem; }
-  .f { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-  .f-label { display: none; font-size: 0.74rem; color: var(--muted); }
-  .cc { display: flex; align-items: center; gap: 8px; min-width: 0; }
-  .cc-name { font-size: 0.8rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .f-curve .seg { flex-wrap: nowrap; }
+  .msg-head { font-family: var(--label); font-size: 16px; line-height: 1; text-transform: uppercase; padding: 0 14px 4px; }
+  .msg { padding: 10px 12px; border: 2px solid transparent; border-image: var(--px-dots) 8 / 8px round; }
+  .msg:hover, .msg:focus-within { border-image: var(--px-frame) 8 / 8px round; }
+  .msg-n { font-family: var(--display); font-size: 32px; line-height: 1; text-align: center; }
+  .f { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .f-label { display: none; font-family: var(--label); font-size: 16px; line-height: 1; text-transform: uppercase; }
+  .f-ch select { width: 100%; }
+  .cc { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .cc-name { font-size: 16px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
   .range { display: flex; align-items: center; gap: 6px; }
-  .range input { width: 56px; }
-  .range span { color: var(--muted); }
-  .out { display: flex; align-items: center; gap: 8px; }
-  .out svg { width: 44px; height: 32px; flex: none; }
-  .out .c-box { fill: none; stroke: var(--line); }
-  .out .c-line { fill: none; stroke: var(--accent); stroke-width: 1.5; }
-  .out .c-dot { fill: var(--head); }
-  .out-val { font-family: var(--mono); color: var(--head); font-size: 0.9rem; font-variant-numeric: tabular-nums; min-width: 3ch; text-align: right; }
-  @media (max-width: 800px) {
+  .range input { width: 64px; }
+  .range span { font-family: var(--mono); font-size: 24px; }
+  .out { display: flex; align-items: center; gap: 10px; }
+  .out canvas { width: 44px; height: 32px; flex: none; display: block; }
+  .out-val { font-family: var(--mono); font-size: 28px; line-height: 1; min-width: 3ch; text-align: right; }
+  .btn.icon { width: 36px; min-height: 36px; padding: 0; }
+  .btn.icon svg { display: block; }
+  @media (max-width: 900px) {
     .msg-head { display: none; }
+    .f-curve .seg { flex-wrap: wrap; }
     .msg {
       grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
       grid-template-areas: "n n del" "ch cc cc" "curve curve curve" "range range out";
-      gap: 10px 12px;
+      gap: 12px;
     }
-    .msg-n { grid-area: n; }
+    .msg-n { grid-area: n; text-align: left; }
     .msg > .f-ch { grid-area: ch; } .msg > .f-cc { grid-area: cc; } .msg > .f-curve { grid-area: curve; }
     .msg > .f-range { grid-area: range; } .msg > .f-out { grid-area: out; justify-self: end; } .msg > .del { grid-area: del; justify-self: end; }
     .f-label { display: block; }
-    .f-ch select { width: 100%; }
+    .f-curve .seg { justify-content: flex-start; }
   }
-  .msg-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin-top: 4px; }
-  .msg-actions .left, .msg-actions .right { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-  .count { font-size: 0.83rem; color: var(--muted); }
+  .msg-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-top: 10px; }
+  .msg-actions .left, .msg-actions .right { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .count { font-family: var(--label); font-size: 16px; line-height: 1; text-transform: uppercase; }
 
-  .order { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
-  .order label { display: flex; flex-direction: column; gap: 2px; font-size: 0.74rem; color: var(--muted); }
+  .order { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; }
+  .order label { display: flex; flex-direction: column; gap: 4px; font-family: var(--label); font-size: 16px; line-height: 1; text-transform: uppercase; }
   .order input { width: 100%; }
-  @media (max-width: 520px) { .order { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  @media (max-width: 560px) { .order { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 
-  footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; align-items: center; padding-top: 20px; border-top: 1px solid var(--line); background: var(--card); padding-bottom: 4px; }
-  @media (min-width: 700px) and (min-height: 600px) { footer { position: sticky; bottom: 0; } }
-  .save { font-size: 0.85rem; color: var(--muted); display: flex; align-items: center; gap: 8px; flex: 1 1 260px; }
-  .save.pending { color: var(--warn); }
-  .save.ok { color: var(--ok); }
-  .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .extras { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; align-items: center; font-size: 16px; padding: 12px 14px; }
+  .actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 
-  .extras { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; align-items: center; font-size: 0.85rem; color: var(--muted); }
-  .extras .actions { gap: 8px; }
+  /* ---------- footer: save state + actions, sticks to the bottom on desktop ---------- */
+  .foot { background: var(--paper); padding-bottom: 6px; }
+  @media (min-width: 700px) and (min-height: 600px) { .foot { position: sticky; bottom: 0; z-index: 1; } }
+  .save { display: flex; align-items: center; gap: 10px; flex: 1 1 260px; font-family: var(--body); text-transform: none; line-height: 1.35; }
+  .save::before { content: ""; width: 16px; height: 16px; flex: none; border: 2px solid var(--ink); }
+  .save.ok::before { background: var(--ink); }
+  .save.pending::before { background: repeating-conic-gradient(var(--ink) 0 25%, transparent 0 50%) 0 0 / 4px 4px; animation: px-blink 1s steps(1) infinite; }
 
-  details { font-size: 0.88rem; color: var(--muted); }
-  details summary { cursor: pointer; color: var(--fg); }
-  details ul { margin: 8px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
-  details a { color: var(--accent); }
+  .help ul { margin: 14px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; font-size: 16px; }
+  .help li { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 10px; }
+  .help li::before { content: ""; width: 6px; height: 6px; margin: 8px 0 0 6px; background: var(--ink); }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <a class="back-link" href="./">&lsaquo; All tools</a>
-  <header>
-    <div class="brand">.axs instruments</div>
-    <h1>MC8P Editor</h1>
-    <p class="sub">Set what every knob sends, plus scenes and display settings, over USB. Plug MC8P into this computer, then connect.</p>
+<main class="panel">
+  <header class="plate">
+    <a class="back-link" href="./">&lt; All tools</a>
+    <div class="plate-top">
+      <div class="wordmark">
+        <div class="brand">.axs instruments</div>
+        <h1><span class="logo">MC8P</span> <span class="tool-tag">Editor</span></h1>
+        <p class="logo-sub">8-Pot MIDI Controller</p>
+      </div>
+    </div>
+    <div class="trace" aria-hidden="true">
+      <span class="node"></span><span class="pulses"></span><span class="flat"></span>
+      <span class="pulses short"></span><span class="flat end"></span><span class="node"></span>
+    </div>
+    <p class="sub">Set what every knob sends, plus scenes and display settings, over USB. Plug MC8P into this computer, then&nbsp;connect.</p>
   </header>
 
-  <section class="conn" aria-live="polite">
+  <section class="conn frame" aria-live="polite">
     <div class="conn-status">
       <span class="dot" id="dot"></span>
       <div class="conn-text">
@@ -269,9 +219,9 @@
 
   <div class="notice" id="notice" hidden></div>
 
-  <section class="panel" aria-label="Knobs">
+  <section class="deck frame-double" aria-label="Knobs">
     <div class="knobs" id="knobs" role="group" aria-label="Choose a knob to edit"></div>
-    <div class="panel-foot">
+    <div class="deck-foot">
       <span id="panelHint">Pick a knob to edit what it sends.</span>
       <span id="panelState"></span>
     </div>
@@ -284,7 +234,7 @@
 
       <section class="group" aria-labelledby="gPot">
         <div class="group-head">
-          <h2 class="group-title" id="gPot">Knob<strong id="potTitle">1</strong></h2>
+          <h2 class="section-head" id="gPot">Knob <span id="potTitle">1</span></h2>
           <span class="hint">Every message is sent each time this knob moves.</span>
         </div>
         <div class="msg-head" aria-hidden="true">
@@ -304,15 +254,15 @@
       </section>
 
       <section class="group" aria-labelledby="gScene">
-        <div class="group-head"><h2 class="group-title" id="gScene">Scenes</h2>
+        <div class="group-head"><h2 class="section-head" id="gScene">Scenes</h2>
           <span class="hint">PREV and NEXT on the main screen step through scenes.</span></div>
         <div class="row">
-          <div><div class="label">Scene CC <span class="panel-name">CC</span></div>
+          <div><div class="label">Scene CC <span class="chip panel-name">CC</span></div>
             <div class="hint">Sent on MIDI channel 1 each time the scene changes. The scene number is the CC value (scene 1 = 0).</div></div>
           <div class="ctl"><input type="number" id="sceneCC" min="0" max="127" aria-label="Scene CC number"></div>
         </div>
         <div class="row">
-          <div><div class="label">Mode <span class="panel-name">MODE</span></div>
+          <div><div class="label">Mode <span class="chip panel-name">MODE</span></div>
             <div class="hint" id="modeHint"></div></div>
           <div class="seg ctl" role="radiogroup" aria-label="Scene mode">
             <label><input type="radio" name="smode" id="smode0" value="0"><span>Step</span></label>
@@ -320,7 +270,7 @@
           </div>
         </div>
         <div class="row" id="rowLen">
-          <div><div class="label">Custom length <span class="panel-name">LEN</span></div>
+          <div><div class="label">Custom length <span class="chip panel-name">LEN</span></div>
             <div class="hint">How many steps the custom list has, 1 to 12.</div></div>
           <div class="ctl"><input type="number" id="sceneLen" min="1" max="12" aria-label="Custom list length"></div>
         </div>
@@ -332,14 +282,14 @@
       </section>
 
       <section class="group" aria-labelledby="gPanel">
-        <div class="group-head"><h2 class="group-title" id="gPanel">Panel</h2></div>
+        <div class="group-head"><h2 class="section-head" id="gPanel">Panel</h2></div>
         <div class="row">
-          <div><div class="label">Edit knob <span class="panel-name">EDIT POT</span></div>
+          <div><div class="label">Edit knob <span class="chip panel-name">EDIT POT</span></div>
             <div class="hint">The knob that sets values in the panel's own ASSIGN and SCENES menus. It still sends its messages on the main screen.</div></div>
           <div class="seg tight ctl" role="radiogroup" aria-label="Edit knob" id="segEdit"></div>
         </div>
         <div class="row">
-          <div><div class="label">Display theme <span class="panel-name">THEME</span></div>
+          <div><div class="label">Display theme <span class="chip panel-name">THEME</span></div>
             <div class="hint">Main screen layout.</div></div>
           <div class="seg ctl" role="radiogroup" aria-label="Display theme">
             <label><input type="radio" name="theme" id="theme0" value="0"><span>MkII</span></label>
@@ -348,13 +298,13 @@
           </div>
         </div>
         <div class="row">
-          <div><div class="label">Invert display <span class="panel-name">INVERT</span></div>
+          <div><div class="label">Invert display <span class="chip panel-name">INVERT</span></div>
             <div class="hint" id="invHint"></div></div>
           <label class="switch ctl"><input type="checkbox" id="inv"><span class="track"></span><span id="invText">Off</span></label>
         </div>
       </section>
 
-      <section class="extras" aria-label="Backups">
+      <section class="extras callout" aria-label="Backups">
         <span>Keep a copy of every setting on this computer, or load one back.</span>
         <div class="actions">
           <button class="btn small" id="btnExport" type="button">Download backup</button>
@@ -365,7 +315,7 @@
     </div>
   </fieldset>
 
-  <footer>
+  <footer class="foot">
     <div class="save" id="save" aria-live="polite">Connect to see MC8P's settings.</div>
     <div class="actions">
       <button class="btn danger" id="btnReset" type="button" disabled>Factory reset</button>
@@ -375,7 +325,7 @@
     </div>
   </footer>
 
-  <details>
+  <details class="px-details help">
     <summary>Can't connect?</summary>
     <ul>
       <li>Use Chrome or Edge on a computer. Safari and phones don't support Web MIDI.</li>
@@ -385,7 +335,7 @@
       <li>Previews embedded in another site may be blocked from MIDI devices. Open this page directly in its own tab.</li>
     </ul>
   </details>
-</div>
+</main>
 
 <script>
 (() => {
@@ -546,23 +496,72 @@
     save: $('save'), saveBtn: $('btnSave'), revert: $('btnRevert'), reset: $('btnReset'), resetCancel: $('btnResetCancel'),
   };
 
-  // Knobs: 270° sweep like a real pot, arc shows where it is now
-  const ARC_R = 26, ARC_LEN = 2 * Math.PI * ARC_R * 0.75;
+  // ---------------- Pixel drawing (1-bit, like the panel screen) ----------------
+  // Knobs are drawn on a 32x32 grid and curves on 22x16, each shown at 2x with
+  // image-rendering: pixelated, so one art pixel = 2 CSS px like the frames.
+  const INK = '#fff', PAPER = '#000';
+  const KN = 32, KC = 15.5;
+  const ringPixels = (r) => {            // pixels of a 270° ring, in sweep order, tagged with their position 0..1
+    const out = [], seen = new Set();
+    for (let s = 0; s <= 540; s++) {
+      const f = s / 540, a = (135 + 270 * f) * Math.PI / 180;
+      const x = Math.floor(KC + 0.5 + r * Math.cos(a)), y = Math.floor(KC + 0.5 + r * Math.sin(a));
+      const key = x + ',' + y;
+      if (!seen.has(key)) { seen.add(key); out.push([x, y, f]); }
+    }
+    return out;
+  };
+  const RING = ringPixels(13.5);
+  const CAP = [];
+  for (let y = 0; y < KN; y++) for (let x = 0; x < KN; x++) if (Math.hypot(x + 0.5 - (KC + 0.5), y + 0.5 - (KC + 0.5)) <= 9.4) CAP.push([x, y]);
+
+  function drawKnob(k, f, live, inverted) {
+    const g = k.ctx, ink = inverted ? PAPER : INK, paper = inverted ? INK : PAPER;
+    g.clearRect(0, 0, KN, KN);
+    g.fillStyle = ink;
+    // track: dotted ring; position: solid ring up to where the pot is
+    RING.forEach(([x, y, p], n) => { if ((live && p <= f) || n % 2 === 0) g.fillRect(x, y, 1, 1); });
+    // end stops
+    const end = (p) => { const a = (135 + 270 * p) * Math.PI / 180; g.fillRect(Math.floor(KC + 0.5 + 15 * Math.cos(a)), Math.floor(KC + 0.5 + 15 * Math.sin(a)), 1, 1); };
+    end(0); end(1);
+    // cap with a cut-out pointer
+    CAP.forEach(([x, y]) => g.fillRect(x, y, 1, 1));
+    g.fillStyle = paper;
+    const a = (135 + 270 * f) * Math.PI / 180;
+    for (let r = 2.5; r <= 8.5; r += 0.25) g.fillRect(Math.floor(KC + 0.5 + r * Math.cos(a)), Math.floor(KC + 0.5 + r * Math.sin(a)), 1, 1);
+  }
+
+  const CW = 22, CH = 16;
+  function drawCurve(cv, m, raw) {
+    const g = cv.getContext('2d');
+    g.clearRect(0, 0, CW, CH);
+    g.fillStyle = INK;
+    for (let x = 0; x < CW; x += 2) { g.fillRect(x, 0, 1, 1); g.fillRect(x + 1, CH - 1, 1, 1); }
+    for (let y = 0; y < CH; y += 2) { g.fillRect(0, y + 1, 1, 1); g.fillRect(CW - 1, y, 1, 1); }
+    const X0 = 2, XW = CW - 4, Y0 = CH - 3, YH = CH - 5;
+    const yAt = r => Y0 - Math.round(mapValue(r, m.min, m.max, m.curve) / 127 * YH);
+    let prev = null;
+    for (let i = 0; i < XW; i++) {
+      const y = yAt(i / (XW - 1) * 1023);
+      const a = prev === null ? y : prev + Math.sign(y - prev);   // join steps without doubling the previous pixel
+      g.fillRect(X0 + i, Math.min(a, y), 1, Math.abs(y - a) + 1);
+      prev = y;
+    }
+    if (raw == null) return;
+    const px = X0 + Math.round(raw / 1023 * (XW - 1)), py = yAt(raw);
+    for (let y = 1; y < CH - 1; y += 2) g.fillRect(px, y, 1, 1);        // playhead
+    g.clearRect(px - 2, py - 2, 5, 5);
+    g.fillRect(px - 1, py - 1, 3, 3);
+  }
+
   const knobEls = [];
   for (let i = 0; i < N_POTS; i++) {
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'knob'; b.setAttribute('aria-pressed', 'false');
     b.innerHTML = `
       <span class="k-tag" hidden>EDIT</span>
-      <svg viewBox="0 0 64 64" aria-hidden="true">
-        <circle class="k-track" cx="32" cy="32" r="${ARC_R}" fill="none" stroke-width="4" stroke-linecap="round"
-          stroke-dasharray="${ARC_LEN} 999" transform="rotate(135 32 32)"/>
-        <circle class="k-arc" cx="32" cy="32" r="${ARC_R}" fill="none" stroke-width="4" stroke-linecap="round"
-          stroke-dasharray="0 999" transform="rotate(135 32 32)"/>
-        <circle class="k-body" cx="32" cy="32" r="18" stroke-width="1"/>
-        <line class="k-tick" x1="32" y1="20" x2="32" y2="15" stroke-width="2.5" stroke-linecap="round"/>
-        <text class="k-num" x="32" y="36.5" text-anchor="middle">${i + 1}</text>
-      </svg>
+      <canvas class="px" width="${KN}" height="${KN}" aria-hidden="true"></canvas>
+      <span class="k-num">${i + 1}</span>
       <span class="k-sum"></span>`;
     b.addEventListener('click', () => { if (!b.dataset.dragged) selectPot(i); delete b.dataset.dragged; });
     // Demo only: drag up/down to turn the knob
@@ -575,7 +574,8 @@
       b.addEventListener('pointermove', move); b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
     });
     ui.knobs.appendChild(b);
-    knobEls.push({ btn: b, arc: b.querySelector('.k-arc'), tick: b.querySelector('.k-tick'), sum: b.querySelector('.k-sum'), tag: b.querySelector('.k-tag') });
+    knobEls.push({ btn: b, ctx: b.querySelector('canvas').getContext('2d'), f: 0, live: false, sum: b.querySelector('.k-sum'), tag: b.querySelector('.k-tag') });
+    drawKnob(knobEls[i], 0, false, false);
   }
 
   $('segEdit').innerHTML = Array.from({ length: N_POTS }, (_, i) =>
@@ -886,10 +886,9 @@
             <div class="range"><input type="number" data-k="min" min="0" max="127" aria-label="Message ${j + 1} minimum value"><span>–</span>
               <input type="number" data-k="max" min="0" max="127" aria-label="Message ${j + 1} maximum value"></div></div>
           <div class="f f-out"><span class="f-label">Now</span>
-            <div class="out"><svg viewBox="0 0 44 32" aria-hidden="true"><rect class="c-box" x="0.5" y="0.5" width="43" height="31" rx="3"/>
-              <polyline class="c-line" points=""/><circle class="c-dot" r="2.5" cx="0" cy="0"/></svg><span class="out-val">–</span></div></div>
+            <div class="out"><canvas class="px curve" width="${CW}" height="${CH}" aria-hidden="true"></canvas><span class="out-val">–</span></div></div>
           <button class="btn icon del" type="button" data-k="del" aria-label="Remove message ${j + 1}" title="Remove">
-            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
+            <svg width="12" height="12" viewBox="0 0 12 12" shape-rendering="crispEdges" fill="currentColor" aria-hidden="true"><path d="M0 0h4v2h-2v2h-2zM8 0h4v4h-2v-2h-2zM2 4h2v-2h4v2h2v4h-2v2h-4v-2h-2zM0 8h2v2h2v2h-4zM10 8h2v4h-4v-2h2z"/></svg></button>
         </div>`).join('');
     }
   }
@@ -1070,20 +1069,14 @@
   const setVal = (el, v) => { if (document.activeElement !== el && el.value !== String(v)) el.value = v; };
   const chText = c => c === OMNI ? 'OMNI' : 'CH' + (c + 1);
 
-  function curvePoints(m) {
-    const pts = [];
-    for (let s = 0; s <= 16; s++) {
-      const raw = s / 16 * 1023;
-      pts.push(`${(3 + s / 16 * 38).toFixed(1)},${(29 - mapValue(raw, m.min, m.max, m.curve) / 127 * 26).toFixed(1)}`);
-    }
-    return pts.join(' ');
-  }
-
   function render() {
     // Knob summaries
     for (let i = 0; i < N_POTS; i++) {
       const k = knobEls[i], list = pots[i], first = list[0];
-      k.btn.setAttribute('aria-pressed', String(i === selected));
+      if (k.btn.getAttribute('aria-pressed') !== String(i === selected)) {
+        k.btn.setAttribute('aria-pressed', String(i === selected));
+        drawKnob(k, k.f, k.live, i === selected);
+      }
       k.sum.textContent = `${chText(first.ch)} CC${first.cc}${list.length > 1 ? ' +' + (list.length - 1) : ''}`;
       k.btn.setAttribute('aria-label', `Knob ${i + 1}: ${list.length} message${list.length > 1 ? 's' : ''}, first ${chText(first.ch)} CC ${first.cc}`);
       k.tag.hidden = global.editPot !== i;
@@ -1101,7 +1094,7 @@
       row.querySelectorAll('[data-k="curve"]').forEach(r => { r.checked = +r.value === m.curve; });
       setVal(row.querySelector('[data-k="min"]'), m.min);
       setVal(row.querySelector('[data-k="max"]'), m.max);
-      row.querySelector('.c-line').setAttribute('points', curvePoints(m));
+      drawCurve(row.querySelector('canvas.curve'), m, status ? status.raw[selected] : null);
       row.querySelector('.del').disabled = list.length <= 1;
     });
     ui.add.disabled = list.length >= MAX_MSGS;
@@ -1140,19 +1133,15 @@
     const raw = status ? status.raw : null;
     for (let i = 0; i < N_POTS; i++) {
       const k = knobEls[i], r = raw ? raw[i] : 0, f = r / 1023;
-      k.arc.setAttribute('stroke-dasharray', `${(ARC_LEN * f).toFixed(1)} 999`);
-      k.tick.setAttribute('transform', `rotate(${(-135 + 270 * f).toFixed(1)} 32 32)`);
-      k.arc.style.opacity = raw ? 1 : 0;
+      if (k.f !== f || k.live !== !!raw) { k.f = f; k.live = !!raw; drawKnob(k, f, k.live, i === selected); }
     }
     const list = pots[selected];
     [...ui.msgs.children].forEach((row, j) => {
-      const m = list[j], dot = row.querySelector('.c-dot'), val = row.querySelector('.out-val');
-      if (!raw || !m) { dot.style.display = 'none'; val.textContent = '–'; return; }
-      const v = mapValue(raw[selected], m.min, m.max, m.curve);
-      dot.style.display = '';
-      dot.setAttribute('cx', (3 + raw[selected] / 1023 * 38).toFixed(1));
-      dot.setAttribute('cy', (29 - v / 127 * 26).toFixed(1));
-      val.textContent = v;
+      const m = list[j], cv = row.querySelector('canvas.curve'), val = row.querySelector('.out-val');
+      if (!m) return;
+      if (!raw) { drawCurve(cv, m, null); val.textContent = '–'; return; }
+      drawCurve(cv, m, raw[selected]);
+      val.textContent = mapValue(raw[selected], m.min, m.max, m.curve);
     });
 
     // Panel state
