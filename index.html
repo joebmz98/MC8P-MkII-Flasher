@@ -4,421 +4,227 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MC8P Tools | .axs instruments</title>
+  <link rel="preload" href="assets/fonts/alagard.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="assets/fonts/silkscreen-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="theme.css">
   <style>
-    :root {
-      --bg-color: #0d1117;
-      --card-bg: #161b22;
-      --border-color: #30363d;
-      --text-main: #c9d1d9;
-      --text-heading: #f0f6fc;
-      --text-muted: #8b949e;
-      --accent-blue: #2f81f7;
-      --accent-green: #238636;
-      --accent-green-hover: #2ea043;
-      --accent-red: #f85149;
-      --warning-bg: #271e13;
-      --warning-border: #845306;
-      --warning-text: #f2cc60;
-      --console-bg: #040d14;
-      --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    /* Start screen + flasher. Shared look lives in theme.css (same as the DCLK web tools). */
+    @media (max-width: 560px) { .trace { margin-top: 10px; } }   /* no walker sprite on MC8P */
+    .badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+
+    /* ---------- tool chooser ---------- */
+    .chooser { display: flex; flex-direction: column; gap: 14px; }
+    .chooser-intro { margin: 0; font-size: 16px; }
+    .tool {
+      display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 18px; align-items: center;
+      padding: 18px 20px; text-decoration: none; color: var(--ink);
+      border: 2px solid transparent; border-image: var(--px-frame) 8 / 8px round;
+    }
+    .tool:hover, .tool:focus-visible { border-image: var(--px-double) 12 / 12px round; }
+    .tool-icon { width: 48px; height: 48px; display: grid; place-items: center; border: 2px solid transparent; border-image: var(--px-fill) 8 fill / 8px round; color: var(--paper); }
+    .tool-icon svg { width: 32px; height: 32px; display: block; }
+    .tool-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+    .tool-name { font-family: var(--display); font-size: 32px; line-height: 1; }
+    .tool-desc { font-size: 16px; line-height: 1.4; }
+    .tool-meta { font-family: var(--label); font-size: 16px; line-height: 1.2; text-transform: uppercase; margin-top: 4px; }
+    .tool-chev { font-family: var(--label); font-size: 32px; line-height: 1; }
+    .tool:hover .tool-chev, .tool:focus-visible .tool-chev { animation: nudge 0.6s steps(2) infinite; }
+    @keyframes nudge { 50% { transform: translateX(4px); } }
+    @media (max-width: 560px) {
+      .tool { grid-template-columns: minmax(0, 1fr) auto; padding: 16px 14px; gap: 12px; }
+      .tool-icon { display: none; }
     }
 
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    [hidden] { display: none !important; }
+    /* ---------- flasher ---------- */
+    .flasher { display: flex; flex-direction: column; gap: 28px; }
+    .flasher .back-link { margin-bottom: -10px; }
 
-    body {
-      background-color: var(--bg-color);
-      color: var(--text-main);
-      font-family: var(--font-family);
-      line-height: 1.6;
-      display: flex;
-      justify-content: center;
-      align-items: flex-start;
-      min-height: 100vh;
-      padding: 32px 16px;
+    .steps { list-style: none; counter-reset: step; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+    .steps li { counter-increment: step; display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 14px; align-items: start; }
+    .steps li::before {
+      content: counter(step, decimal-leading-zero);
+      font-family: var(--label); font-size: 16px; line-height: 1; text-align: center;
+      padding: 6px 0 5px; border: 2px solid transparent; border-image: var(--px-fill) 8 fill / 8px round; color: var(--paper);
     }
+    .steps small { display: block; font-size: 16px; margin-top: 6px; padding-left: 12px; border-left: 2px dotted var(--ink); }
 
-    .container {
-      width: 100%;
-      max-width: 680px;
-      background: var(--card-bg);
-      border: 1px solid var(--border-color);
-      border-radius: 12px;
-      padding: 32px;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-    }
-
-    @media (max-width: 520px) {
-      .container { padding: 20px 16px; }
-      .action-area { padding: 16px; }
-    }
-
-    .header {
-      border-bottom: 1px solid var(--border-color);
-      padding-bottom: 20px;
-      margin-bottom: 24px;
-    }
-
-    .brand {
-      font-size: 0.85rem;
-      font-weight: 600;
-      letter-spacing: 1.5px;
-      color: var(--accent-blue);
-      text-transform: uppercase;
-      margin-bottom: 4px;
-    }
-
-    h1 { color: var(--text-heading); font-size: 1.75rem; font-weight: 600; }
-    .subtitle { color: var(--text-muted); font-size: 0.95rem; margin-top: 4px; }
-
-    .badge-container { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
-    .badge {
-      font-size: 0.75rem;
-      background: #21262d;
-      border: 1px solid var(--border-color);
-      color: var(--text-main);
-      padding: 2px 8px;
-      border-radius: 6px;
-    }
-
-    .section { margin-bottom: 24px; }
-    .section-title { font-size: 1rem; font-weight: 600; color: var(--text-heading); margin-bottom: 12px; }
-
-    ol { padding-left: 20px; font-size: 0.92rem; }
-    li { margin-bottom: 8px; }
-    li small { color: var(--text-muted); display: block; }
-
-    .warning-box {
-      background: var(--warning-bg);
-      border: 1px solid var(--warning-border);
-      color: var(--warning-text);
-      padding: 12px 16px;
-      border-radius: 8px;
-      font-size: 0.88rem;
-      margin-bottom: 24px;
-    }
-
-    .action-area {
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-      padding: 24px;
-      background: #0d1117;
-      border: 1px solid var(--border-color);
-      border-radius: 8px;
-      margin-bottom: 24px;
-    }
-
-    fieldset { border: 0; display: flex; flex-direction: column; gap: 8px; }
-    legend { font-size: 0.85rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+    .action-area { display: flex; flex-direction: column; gap: 20px; padding: 22px; }
+    @media (max-width: 560px) { .action-area { padding: 16px 12px; } }
+    fieldset { border: 0; margin: 0; padding: 0; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+    legend { padding: 0; margin-bottom: 10px; font-family: var(--label); font-size: 16px; line-height: 1; text-transform: uppercase; }
 
     .choice {
-      display: flex;
-      gap: 10px;
-      align-items: flex-start;
-      padding: 10px 12px;
-      border: 1px solid var(--border-color);
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 0.92rem;
+      display: flex; gap: 14px; align-items: flex-start; padding: 12px 14px; cursor: pointer;
+      border: 2px solid transparent; border-image: var(--px-dots) 8 / 8px round;
     }
-    .choice:has(input:checked) { border-color: var(--accent-blue); background: rgba(47,129,247,0.08); }
-    .choice input { margin-top: 5px; accent-color: var(--accent-blue); }
-    .choice .hint { display: block; color: var(--text-muted); font-size: 0.82rem; }
+    .choice:hover { border-image: var(--px-frame) 8 / 8px round; }
+    .choice:has(input:checked) { border-image: var(--px-double) 12 / 12px round; }
+    .choice input { margin-top: 3px; }
+    .choice-name { font-weight: 600; }
+    .choice .hint { display: block; font-size: 16px; }
 
-    .custom-fields { display: none; flex-direction: column; gap: 8px; padding: 4px 0 0 2px; }
+    .custom-fields { display: none; flex-direction: column; gap: 10px; padding: 4px 0 0; }
     .custom-fields.visible { display: flex; }
-    .custom-fields label { font-size: 0.85rem; color: var(--text-muted); }
-    .custom-fields input[type="text"] {
-      background: var(--console-bg);
-      color: var(--text-heading);
-      border: 1px solid var(--border-color);
-      border-radius: 6px;
-      padding: 6px 10px;
-      font-family: var(--mono);
-      font-size: 0.85rem;
-      width: 140px;
+    .custom-fields input[type="file"] { font: 16px var(--body); color: var(--ink); max-width: 100%; }
+    .custom-fields input[type="file"]::file-selector-button {
+      font-family: var(--label); font-size: 16px; line-height: 1; text-transform: uppercase; color: var(--ink); background: none; cursor: pointer;
+      margin-right: 12px; padding: 10px 14px 9px; border: 2px solid transparent; border-image: var(--px-frame) 8 / 8px round;
     }
-    .custom-fields input[type="file"] { color: var(--text-main); font-size: 0.85rem; max-width: 100%; }
-    .addr-row { display: none; align-items: center; gap: 10px; }
+    .custom-fields input[type="file"]::file-selector-button:hover { border-image: var(--px-fill) 8 fill / 8px round; color: var(--paper); }
+    .addr-row { display: none; align-items: center; gap: 12px; flex-wrap: wrap; }
     .addr-row.visible { display: flex; }
+    .addr-row label { font-size: 16px; }
+    #addrInput { width: 150px; }
 
-    .image-info {
-      font-family: var(--mono);
-      font-size: 0.8rem;
-      color: var(--text-muted);
-      min-height: 1.2em;
-    }
-    .image-info .warn { color: var(--warning-text); display: block; font-family: var(--font-family); }
+    .image-info { font-family: var(--mono); font-size: 22px; line-height: 1.2; min-height: 1.2em; }
+    .image-info .warn { display: block; margin-top: 8px; font-family: var(--body); font-size: 16px; padding: 8px 12px; border: 2px solid transparent; border-image: var(--px-fill) 8 fill / 8px round; color: var(--paper); }
 
-    .options { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 0.88rem; }
-    .options label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
-    .options input { accent-color: var(--accent-blue); }
+    .options { display: flex; flex-wrap: wrap; gap: 10px 26px; font-size: 16px; }
+    .options label { display: flex; align-items: center; gap: 10px; cursor: pointer; }
 
-    .flash-row { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+    .flash-row { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 6px 0; }
 
-    .btn-primary {
-      background-color: var(--accent-green);
-      color: #ffffff;
-      border: 1px solid rgba(255,255,255,0.1);
-      padding: 12px 28px;
-      font-size: 1rem;
-      font-weight: 600;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: background-color 0.15s ease;
-    }
-
-    .btn-primary:hover { background-color: var(--accent-green-hover); }
-    .btn-primary:disabled { background-color: #21262d; color: var(--text-muted); cursor: not-allowed; }
-
-    .btn-secondary {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      background: #21262d;
-      color: var(--text-heading);
-      border: 1px solid var(--border-color);
-      padding: 8px 16px;
-      border-radius: 6px;
-      text-decoration: none;
-      font-size: 0.88rem;
-      cursor: pointer;
-      align-self: center;
-    }
-
-    .btn-secondary:hover { background: #30363d; }
-
-    .status-text { font-size: 0.9rem; color: var(--text-muted); text-align: center; }
-    .status-text.ok { color: #3fb950; }
-    .status-text.error { color: var(--accent-red); }
-
-    .progress {
-      width: 100%;
-      height: 8px;
-      background: #21262d;
-      border-radius: 4px;
-      overflow: hidden;
-      visibility: hidden;
-    }
+    .progress { width: 100%; height: 24px; padding: 4px; visibility: hidden; border: 2px solid transparent; border-image: var(--px-frame) 8 / 8px round; }
     .progress.visible { visibility: visible; }
-    .progress-bar { height: 100%; width: 0; background: var(--accent-blue); transition: width 0.15s linear; }
-
-    .console-container { width: 100%; text-align: left; }
-
-    .console-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 8px;
-      gap: 8px;
+    .progress-bar {
+      height: 100%; width: 0; transition: width 0.15s steps(4);
+      background: repeating-linear-gradient(90deg, var(--ink) 0 8px, transparent 8px 12px);
     }
 
-    .console-title {
-      font-size: 0.85rem;
-      font-weight: 600;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
+    .status-text { font-family: var(--label); font-size: 16px; line-height: 1.4; text-transform: uppercase; text-align: center; max-width: 52ch; }
+    .status-text.ok { padding: 10px 14px; border: 2px solid transparent; border-image: var(--px-double) 12 / 12px round; }
+    .status-text.error { padding: 10px 14px; border: 2px solid transparent; border-image: var(--px-fill) 8 fill / 8px round; color: var(--paper); text-transform: none; font-family: var(--body); }
 
+    .console-container { width: 100%; }
+    .console-header { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+    .console-title { font-family: var(--label); font-size: 16px; line-height: 1; text-transform: uppercase; }
     .console-box {
-      background-color: var(--console-bg);
-      border: 1px solid var(--border-color);
-      border-radius: 6px;
-      padding: 12px;
-      font-family: var(--mono);
-      font-size: 0.8rem;
-      color: #58a6ff;
-      height: 200px;
-      overflow-y: auto;
-      white-space: pre-wrap;
-      word-break: break-all;
+      padding: 12px 14px; height: 220px; overflow-y: auto;
+      font-family: var(--mono); font-size: 20px; line-height: 1.15; white-space: pre-wrap; word-break: break-all;
+      border: 2px solid transparent; border-image: var(--px-frame) 8 / 8px round;
+      scrollbar-color: var(--ink) var(--paper);
     }
+    #videoLink { align-self: center; }
 
-    details {
-      border: 1px solid var(--border-color);
-      border-radius: 8px;
-      padding: 12px 16px;
-      margin-bottom: 24px;
-      font-size: 0.9rem;
-    }
-    details summary { cursor: pointer; font-weight: 600; color: var(--text-heading); }
-    details h3 { font-size: 0.92rem; color: var(--text-heading); margin: 16px 0 4px; }
-    details p { color: var(--text-main); }
-    code { font-family: var(--mono); font-size: 0.85em; background: #21262d; padding: 1px 5px; border-radius: 4px; }
-    a { color: var(--accent-blue); }
-
-    .footer {
-      border-top: 1px solid var(--border-color);
-      padding-top: 16px;
-      font-size: 0.8rem;
-      color: var(--text-muted);
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      justify-content: space-between;
-      align-items: center;
-    }
-    /* ---------- tool chooser ---------- */
-    .chooser { display: flex; flex-direction: column; gap: 12px; margin-bottom: 24px; }
-    .chooser-intro { font-size: 0.92rem; color: var(--text-muted); margin-bottom: 4px; }
-    .tool {
-      display: grid;
-      grid-template-columns: auto minmax(0, 1fr) auto;
-      gap: 16px;
-      align-items: center;
-      padding: 18px 20px;
-      background: #0d1117;
-      border: 1px solid var(--border-color);
-      border-radius: 8px;
-      color: var(--text-main);
-      text-decoration: none;
-      transition: border-color 0.15s ease, background-color 0.15s ease;
-    }
-    .tool:hover { border-color: var(--accent-blue); background: rgba(47,129,247,0.06); }
-    .tool:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
-    .tool-icon {
-      width: 44px; height: 44px; border-radius: 10px;
-      display: grid; place-items: center;
-      background: #21262d; border: 1px solid var(--border-color); color: var(--accent-blue);
-    }
-    .tool-icon svg { width: 22px; height: 22px; }
-    .tool-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-    .tool-name { color: var(--text-heading); font-weight: 600; font-size: 1.05rem; }
-    .tool-desc { font-size: 0.9rem; }
-    .tool-meta { font-size: 0.8rem; color: var(--text-muted); }
-    .tool-chev { color: var(--text-muted); font-size: 1.4rem; line-height: 1; }
-    .tool:hover .tool-chev { color: var(--accent-blue); }
-    @media (max-width: 520px) { .tool { padding: 14px; gap: 12px; } .tool-icon { width: 38px; height: 38px; } }
-
-    .back-link {
-      display: inline-flex; align-items: center; gap: 6px;
-      font-size: 0.88rem; color: var(--text-muted); text-decoration: none;
-      margin-bottom: 16px;
-    }
-    .back-link:hover { color: var(--accent-blue); }
-
-    .footer {
-      border-top: 1px solid var(--border-color);
-      padding-top: 16px;
-      font-size: 0.8rem;
-      color: var(--text-muted);
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      justify-content: space-between;
-      align-items: center;
-    }
+    details.px-details h3 { font-family: var(--label); font-weight: 400; font-size: 16px; line-height: 1.3; text-transform: uppercase; margin: 22px 0 6px; }
+    details.px-details p { margin: 0; font-size: 16px; }
   </style>
 </head>
 <body>
 
-  <div class="container">
-    <header class="header">
-      <div class="brand">.axs instruments</div>
-      <h1>MC8P MkII MIDI&nbsp;Controller</h1>
-      <p class="subtitle" id="subtitle">Firmware updates and settings over&nbsp;USB</p>
-      <div class="badge-container">
-        <span class="badge">Hardware: STM32F411CEU6 Black Pill</span>
-        <span class="badge" id="versionBadge">Firmware: loading&hellip;</span>
+  <main class="panel">
+    <header class="plate">
+      <div class="plate-top">
+        <div class="wordmark">
+          <div class="brand">.axs instruments</div>
+          <h1><span class="logo">MC8P</span> <span class="tool-tag">MkII</span></h1>
+          <p class="logo-sub">8-Pot MIDI Controller</p>
+        </div>
+      </div>
+      <div class="trace" aria-hidden="true">
+        <span class="node"></span><span class="pulses"></span><span class="flat"></span>
+        <span class="pulses short"></span><span class="flat end"></span><span class="node"></span>
+      </div>
+      <p class="sub" id="subtitle">Firmware updates and settings over&nbsp;USB</p>
+      <div class="badges">
+        <span class="chip">STM32F411CEU6 Black Pill</span>
+        <span class="chip" id="versionBadge">Firmware: loading&hellip;</span>
       </div>
     </header>
 
     <nav class="chooser" id="chooser" aria-label="Choose a tool">
-      <p class="chooser-intro">What would you like to&nbsp;do?</p>
+      <h2 class="section-head">Choose a tool</h2>
       <a class="tool" href="#flash">
         <span class="tool-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 19h16"/></svg>
+          <svg viewBox="0 0 16 16" shape-rendering="crispEdges" fill="currentColor"><path d="M7 1h2v8h2v-2h2v2h-1v1h-1v1h-1v1h-1v1h-2v-1h-1v-1h-1v-1h-1v-1h-1v-1h2v2h2zM2 13h12v2h-12z"/></svg>
         </span>
         <span class="tool-text">
           <span class="tool-name">Update firmware</span>
           <span class="tool-desc">Install the latest MC8P release, or your own build, with MC8P in DFU&nbsp;mode.</span>
           <span class="tool-meta">WebUSB &middot; <span id="chooserVersion">latest release</span></span>
         </span>
-        <span class="tool-chev" aria-hidden="true">&rsaquo;</span>
+        <span class="tool-chev" aria-hidden="true">&gt;</span>
       </a>
       <a class="tool" href="editor.html">
         <span class="tool-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="8" r="3"/><path d="M7 8l1.6-1.6"/><circle cx="17" cy="8" r="3"/><path d="M17 8l-1.2 2"/><circle cx="7" cy="17" r="3"/><path d="M7 17l-2 -1"/><circle cx="17" cy="17" r="3"/><path d="M17 17l1.8 1"/></svg>
+          <svg viewBox="0 0 16 16" shape-rendering="crispEdges" fill="currentColor"><path d="M5 0h6v1h-6zM3 1h2v1h-2zM11 1h2v1h-2zM2 2h1v1h-1zM13 2h1v1h-1zM1 3h1v1h-1zM14 3h1v1h-1zM1 4h1v1h-1zM14 4h1v1h-1zM0 5h1v1h-1zM15 5h1v1h-1zM0 6h1v1h-1zM15 6h1v1h-1zM0 7h1v1h-1zM15 7h1v1h-1zM0 8h1v1h-1zM15 8h1v1h-1zM0 9h1v1h-1zM15 9h1v1h-1zM0 10h1v1h-1zM15 10h1v1h-1zM1 11h1v1h-1zM14 11h1v1h-1zM1 12h1v1h-1zM14 12h1v1h-1zM2 13h1v1h-1zM13 13h1v1h-1zM3 14h2v1h-2zM11 14h2v1h-2zM5 15h6v1h-6zM7 7h2v1h-2zM7 8h2v1h-2zM9 6h1v1h-1zM10 5h1v1h-1zM11 4h1v1h-1z"/></svg>
         </span>
         <span class="tool-text">
           <span class="tool-name">Edit knob assignments</span>
           <span class="tool-desc">Channel, CC, curve and range for up to 10 messages per knob, plus scenes and display settings, live while MC8P runs&nbsp;normally.</span>
-          <span class="tool-meta">Web MIDI &middot; needs firmware v3.2 or&nbsp;later</span>
+          <span class="tool-meta">Web MIDI &middot; firmware v3.2 or&nbsp;later</span>
         </span>
-        <span class="tool-chev" aria-hidden="true">&rsaquo;</span>
+        <span class="tool-chev" aria-hidden="true">&gt;</span>
       </a>
       <p class="chooser-intro">Both need Chrome or Edge on a computer and a USB&#8209;C data&nbsp;cable.</p>
     </nav>
 
-    <div id="flasherView" hidden>
-    <a class="back-link" href="#" id="backLink">&lsaquo; All&nbsp;tools</a>
+    <div id="flasherView" class="flasher" hidden>
+    <a class="back-link" href="#" id="backLink">&lt; All&nbsp;tools</a>
 
-    <div class="warning-box">
-      <strong>Requirements:</strong> Chrome or Edge on a computer (WebUSB is not available in Firefox, Safari or on iPhone). On Windows the bootloader may need a one time driver change, see Troubleshooting&nbsp;below.
+    <div class="notice">
+      <span><strong>Requirements:</strong> Chrome or Edge on a computer (WebUSB is not available in Firefox, Safari or on iPhone). On Windows the bootloader may need a one time driver change, see Troubleshooting&nbsp;below.</span>
     </div>
 
-    <section class="section">
-      <h2 class="section-title">How to&nbsp;flash</h2>
-      <ol>
-        <li>Connect the board with a USB&#8209;C data cable (plug it straight into the computer, not a&nbsp;hub).</li>
-        <li>Put it into DFU mode: <strong>hold BOOT0</strong>, tap <strong>NRST</strong>, keep holding BOOT0 for about one second, then let&nbsp;go.
-          <small>You can also hold BOOT0 while plugging the cable in. These boards sometimes need two or three tries. In DFU mode the OLED stays&nbsp;blank.</small></li>
-        <li>Choose the firmware below, click <strong>Flash Firmware</strong> and pick <strong>STM32 BOOTLOADER</strong> in the&nbsp;popup.</li>
-        <li>Wait for <strong>Done</strong>. The controller restarts by itself. If it does not, press <strong>NRST</strong>&nbsp;once.</li>
+    <section>
+      <h2 class="section-head">How to flash</h2>
+      <ol class="steps">
+        <li><span>Connect the board with a USB&#8209;C data cable (plug it straight into the computer, not a&nbsp;hub).</span></li>
+        <li><span>Put it into DFU mode: <strong>hold BOOT0</strong>, tap <strong>NRST</strong>, keep holding BOOT0 for about one second, then let&nbsp;go.
+          <small>You can also hold BOOT0 while plugging the cable in. These boards sometimes need two or three tries. In DFU mode the OLED stays&nbsp;blank.</small></span></li>
+        <li><span>Choose the firmware below, click <strong>Flash Firmware</strong> and pick <strong>STM32 BOOTLOADER</strong> in the&nbsp;popup.</span></li>
+        <li><span>Wait for <strong>Done</strong>. The controller restarts by itself. If it does not, press <strong>NRST</strong>&nbsp;once.</span></li>
       </ol>
     </section>
 
-    <div class="action-area">
+    <div class="action-area frame-double">
       <fieldset>
         <legend>Firmware</legend>
         <label class="choice">
-          <input type="radio" name="source" value="release" checked>
-          <span><span id="releaseLabel">Latest release</span>
+          <input class="px-radio" type="radio" name="source" value="release" checked>
+          <span><span class="choice-name" id="releaseLabel">Latest release</span>
             <span class="hint">Downloaded from this&nbsp;site</span></span>
         </label>
         <label class="choice">
-          <input type="radio" name="source" value="custom">
-          <span>Custom file
+          <input class="px-radio" type="radio" name="source" value="custom">
+          <span><span class="choice-name">Custom file</span>
             <span class="hint">A .hex or .bin you built yourself. Prefer the .hex, it carries its own&nbsp;address.</span></span>
         </label>
         <div class="custom-fields" id="customFields">
           <input type="file" id="fileInput" accept=".hex,.bin,.ihex">
           <div class="addr-row" id="addrRow">
             <label for="addrInput">.bin start address</label>
-            <input type="text" id="addrInput" value="0x08000000" spellcheck="false">
+            <input class="field" type="text" id="addrInput" value="0x08000000" spellcheck="false">
           </div>
         </div>
         <div class="image-info" id="imageInfo"></div>
       </fieldset>
 
       <div class="options">
-        <label><input type="checkbox" id="verifyOpt" checked> Verify after&nbsp;writing</label>
-        <label><input type="checkbox" id="runOpt" checked> Start firmware when&nbsp;done</label>
+        <label><input class="px-check" type="checkbox" id="verifyOpt" checked> Verify after&nbsp;writing</label>
+        <label><input class="px-check" type="checkbox" id="runOpt" checked> Start firmware when&nbsp;done</label>
       </div>
 
       <div class="flash-row">
-        <button id="flashBtn" class="btn-primary" disabled>Flash Firmware</button>
+        <button id="flashBtn" class="btn primary big" disabled>Flash Firmware</button>
         <div class="progress" id="progress"><div class="progress-bar" id="progressBar"></div></div>
         <div id="status" class="status-text">Loading firmware&hellip;</div>
       </div>
 
       <div class="console-container">
         <div class="console-header">
-          <span class="console-title">Live Debug Terminal</span>
-          <button id="downloadLogBtn" class="btn-secondary" style="padding: 4px 10px; font-size: 0.75rem;">📥 Download Log (.txt)</button>
+          <span class="console-title">Live debug terminal</span>
+          <button id="downloadLogBtn" class="btn small" type="button">Download log (.txt)</button>
         </div>
         <div id="consoleBox" class="console-box"></div>
       </div>
 
-      <a href="https://youtu.be/ENxouRuxUlE" target="_blank" rel="noopener" class="btn-secondary">
-        📺 Watch Setup &amp; Flashing Video&nbsp;Tutorial
+      <a href="https://youtu.be/ENxouRuxUlE" id="videoLink" target="_blank" rel="noopener" class="btn">
+        Watch the setup &amp; flashing video
       </a>
     </div>
 
-    <details>
+    <details class="px-details">
       <summary>Troubleshooting</summary>
 
       <h3>STM32 BOOTLOADER is not in the&nbsp;list</h3>
@@ -438,11 +244,11 @@
     </details>
     </div>
 
-    <footer class="footer">
+    <footer class="foot">
       <div>&copy; .axs instruments. All rights&nbsp;reserved.</div>
       <div>Target: STM32F411&nbsp;(GenF4)</div>
     </footer>
-  </div>
+  </main>
 
   <script type="module">
     import { FirmwareImage, StmDfuse, DfuError, FLASH_BASE, hex32 } from './dfuse.js';
