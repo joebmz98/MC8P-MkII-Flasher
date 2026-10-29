@@ -14,7 +14,6 @@
      at 2x so they sit on the same pixel grid as the frames. Pick one to edit its
      messages below (the ASSIGN menu), then scenes and panel settings (SETTINGS). */
   .panel { max-width: 920px; }
-  @media (max-width: 560px) { .trace { margin-top: 10px; } }   /* no walker sprite on MC8P */
 
   /* ---------- connection ---------- */
   .conn { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 18px; padding: 14px 16px; }
@@ -196,9 +195,10 @@
         <p class="logo-sub">8-Pot MIDI Controller</p>
       </div>
     </div>
-    <div class="trace" aria-hidden="true">
-      <span class="node"></span><span class="pulses"></span><span class="flat"></span>
-      <span class="pulses short"></span><span class="flat end"></span><span class="node"></span>
+    <div class="space" aria-hidden="true">
+      <span class="planet"></span>
+      <span class="orbit"><i class="star"></i><i class="star s"></i><i class="star"></i><i class="star s"></i><i class="star"></i><i class="star s"></i><i class="ufo"></i></span>
+      <span class="moon"></span>
     </div>
     <p class="sub">Set what every knob sends, plus scenes and display settings, over USB. Plug MC8P into this computer, then&nbsp;connect.</p>
   </header>

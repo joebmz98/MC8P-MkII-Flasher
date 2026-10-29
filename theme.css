@@ -117,6 +117,41 @@ code {
 
 .sub { margin: 18px 0 0; max-width: 60ch; }
 
+/* ---------- space strip (header art, MC8P): a ringed planet, a dotted orbit with
+   twinkling stars and a drifting UFO, and a crescent moon. Drawn at 3 CSS px per art pixel. ---------- */
+.space {
+  --planet: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 14' width='64' height='28' shape-rendering='crispEdges' fill='white'><rect x='14' y='0' width='4' height='1'/><rect x='12' y='1' width='8' height='1'/><rect x='11' y='2' width='10' height='1'/><rect x='10' y='3' width='1' height='1'/><rect x='12' y='3' width='1' height='1'/><rect x='14' y='3' width='1' height='1'/><rect x='16' y='3' width='1' height='1'/><rect x='18' y='3' width='1' height='1'/><rect x='20' y='3' width='1' height='1'/><rect x='10' y='4' width='12' height='1'/><rect x='6' y='5' width='20' height='1'/><rect x='1' y='6' width='6' height='1'/><rect x='9' y='6' width='14' height='1'/><rect x='25' y='6' width='6' height='1'/><rect x='0' y='7' width='2' height='1'/><rect x='9' y='7' width='14' height='1'/><rect x='30' y='7' width='2' height='1'/><rect x='0' y='8' width='2' height='1'/><rect x='9' y='8' width='14' height='1'/><rect x='30' y='8' width='2' height='1'/><rect x='1' y='9' width='6' height='1'/><rect x='25' y='9' width='6' height='1'/><rect x='6' y='10' width='20' height='1'/><rect x='12' y='12' width='8' height='1'/><rect x='14' y='13' width='4' height='1'/></svg>");
+  --moon: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' width='32' height='32' shape-rendering='crispEdges' fill='white'><rect x='5' y='1' width='2' height='1'/><rect x='3' y='2' width='3' height='1'/><rect x='2' y='3' width='3' height='1'/><rect x='2' y='4' width='3' height='1'/><rect x='1' y='5' width='4' height='1'/><rect x='1' y='6' width='1' height='1'/><rect x='3' y='6' width='2' height='1'/><rect x='1' y='7' width='4' height='1'/><rect x='1' y='8' width='5' height='1'/><rect x='1' y='9' width='2' height='1'/><rect x='4' y='9' width='3' height='1'/><rect x='1' y='10' width='7' height='1'/><rect x='2' y='11' width='7' height='1'/><rect x='2' y='12' width='3' height='1'/><rect x='6' y='12' width='8' height='1'/><rect x='3' y='13' width='10' height='1'/><rect x='5' y='14' width='6' height='1'/></svg>");
+  --ufo: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 7' width='32' height='14' shape-rendering='crispEdges' fill='white'><rect x='6' y='0' width='4' height='1'/><rect x='4' y='1' width='2' height='1'/><rect x='10' y='1' width='2' height='1'/><rect x='3' y='2' width='1' height='1'/><rect x='12' y='2' width='1' height='1'/><rect x='1' y='3' width='14' height='1'/><rect x='0' y='4' width='1' height='1'/><rect x='2' y='4' width='2' height='1'/><rect x='5' y='4' width='2' height='1'/><rect x='9' y='4' width='2' height='1'/><rect x='12' y='4' width='2' height='1'/><rect x='15' y='4' width='1' height='1'/><rect x='1' y='5' width='14' height='1'/><rect x='3' y='6' width='2' height='1'/><rect x='11' y='6' width='2' height='1'/></svg>");
+  --spark: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 5 5' width='10' height='10' shape-rendering='crispEdges' fill='white'><rect x='2' y='0' width='1' height='1'/><rect x='2' y='1' width='1' height='1'/><rect x='0' y='2' width='2' height='1'/><rect x='3' y='2' width='2' height='1'/><rect x='2' y='3' width='1' height='1'/><rect x='2' y='4' width='1' height='1'/></svg>");
+  --spark-s: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 3 3' width='6' height='6' shape-rendering='crispEdges' fill='white'><rect x='1' y='0' width='1' height='1'/><rect x='0' y='1' width='1' height='1'/><rect x='2' y='1' width='1' height='1'/><rect x='1' y='2' width='1' height='1'/></svg>");
+  display: flex; align-items: center; gap: 12px; height: 48px; margin-top: 4px;
+}
+.space > * { flex: none; }
+.space .planet { width: 96px; height: 42px; background: var(--planet) center / 100% 100% no-repeat; }
+.space .moon { width: 48px; height: 48px; background: var(--moon) center / 100% 100% no-repeat; }
+.space .orbit {
+  flex: 1 1 auto; min-width: 96px; height: 48px; position: relative;
+  background: repeating-linear-gradient(90deg, var(--ink) 0 3px, transparent 3px 12px) left 30px / 100% 3px no-repeat;
+}
+.space .orbit i { position: absolute; display: block; }
+.space .ufo {
+  width: 48px; height: 21px; top: 2px; left: 0; background: var(--ufo) center / 100% 100% no-repeat;
+  animation: ufo-fly 28s steps(140) infinite alternate, ufo-bob 1.2s steps(1) infinite;
+}
+.space .star { width: 15px; height: 15px; background: var(--spark) center / 100% 100% no-repeat; animation: twinkle 2.4s steps(1) infinite; }
+.space .star.s { width: 9px; height: 9px; background-image: var(--spark-s); }
+.space .star:nth-of-type(1) { left: 9%;  top: 36px; animation-delay: -0.4s; }
+.space .star:nth-of-type(2) { left: 27%; top: 4px;  animation-delay: -1.6s; }
+.space .star:nth-of-type(3) { left: 44%; top: 38px; animation-delay: -0.9s; }
+.space .star:nth-of-type(4) { left: 63%; top: 6px;  animation-delay: -2.0s; }
+.space .star:nth-of-type(5) { left: 81%; top: 36px; animation-delay: -1.2s; }
+.space .star:nth-of-type(6) { left: 94%; top: 8px;  animation-delay: -0.2s; }
+@keyframes ufo-fly { from { left: 0; } to { left: calc(100% - 48px); } }
+@keyframes ufo-bob { 50% { transform: translateY(3px); } }
+@keyframes twinkle { 0%, 70% { opacity: 1; } 71%, 100% { opacity: 0.25; } }
+@media (max-width: 560px) { .space { gap: 6px; } .space .orbit { min-width: 60px; } }
+
 /* ---------- buttons ---------- */
 button { font: inherit; color: inherit; cursor: pointer; }
 .btn {

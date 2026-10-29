@@ -9,7 +9,6 @@
   <link rel="stylesheet" href="theme.css">
   <style>
     /* Start screen + flasher. Shared look lives in theme.css (same as the DCLK web tools). */
-    @media (max-width: 560px) { .trace { margin-top: 10px; } }   /* no walker sprite on MC8P */
     .badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
 
     /* ---------- tool chooser ---------- */
@@ -121,9 +120,10 @@
           <p class="logo-sub">8-Pot MIDI Controller</p>
         </div>
       </div>
-      <div class="trace" aria-hidden="true">
-        <span class="node"></span><span class="pulses"></span><span class="flat"></span>
-        <span class="pulses short"></span><span class="flat end"></span><span class="node"></span>
+      <div class="space" aria-hidden="true">
+        <span class="planet"></span>
+        <span class="orbit"><i class="star"></i><i class="star s"></i><i class="star"></i><i class="star s"></i><i class="star"></i><i class="star s"></i><i class="ufo"></i></span>
+        <span class="moon"></span>
       </div>
       <p class="sub" id="subtitle">Firmware updates and settings over&nbsp;USB</p>
       <div class="badges">
