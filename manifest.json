@@ -1,6 +1,6 @@
 {
   "name": "MC8P MkII MIDI Controller Firmware",
-  "version": "v3.1",
+  "version": "v3.2",
   "builds": [
     {
       "chipFamily": "STM32F411",
