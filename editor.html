@@ -1,0 +1,1193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>MC8P Editor</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* Layout: one centred card like the MC8P Web Flasher. The 8 knobs up top are laid
+     out like the panel (1-4 over 5-8); pick one to edit its messages below, the same
+     things the ASSIGN menu edits. Then scenes and panel settings, as in SETTINGS. */
+  :root {
+    --bg: #0d1117;
+    --card: #161b22;
+    --well: #0b0f14;
+    --raised: #21262d;
+    --line: #30363d;
+    --fg: #c9d1d9;
+    --head: #f0f6fc;
+    --muted: #8b949e;
+    --accent: #2f81f7;
+    --accent-soft: rgba(47,129,247,0.12);
+    --ok: #3fb950;
+    --warn: #f2cc60;
+    --warn-bg: #271e13;
+    --warn-line: #845306;
+    --bad: #f85149;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font);
+    font-size: 15px;
+    line-height: 1.55;
+    padding-block: 32px 48px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  .wrap {
+    max-width: 860px;
+    margin: 0 auto;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    padding: 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+  @media (max-width: 520px) { .wrap { padding: 20px 16px; } }
+
+  header { display: flex; flex-direction: column; gap: 4px; padding-bottom: 20px; border-bottom: 1px solid var(--line); }
+  .back-link { align-self: flex-start; font-size: 0.88rem; color: var(--muted); text-decoration: none; margin-bottom: -12px; }
+  .back-link:hover { color: var(--accent); }
+  .brand { font-size: 0.8rem; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: var(--accent); }
+  h1 { margin: 0; color: var(--head); font-size: 1.75rem; font-weight: 600; text-wrap: balance; }
+  .sub { margin: 0; color: var(--muted); font-size: 0.95rem; }
+
+  /* ---------- connection bar ---------- */
+  .conn {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px;
+    padding: 14px 16px; background: var(--well); border: 1px solid var(--line); border-radius: 8px;
+  }
+  .conn-status { display: flex; align-items: center; gap: 10px; flex: 1 1 240px; min-width: 0; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
+  .dot.on { background: var(--ok); box-shadow: 0 0 0 3px rgba(63,185,80,0.2); }
+  .dot.demo { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .dot.err { background: var(--bad); }
+  .conn-text { display: flex; flex-direction: column; min-width: 0; }
+  .conn-title { color: var(--head); font-weight: 600; font-size: 0.95rem; }
+  .conn-detail { color: var(--muted); font-size: 0.82rem; overflow-wrap: anywhere; }
+  .conn-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  button { font: inherit; cursor: pointer; }
+  .btn {
+    background: var(--raised); color: var(--head); border: 1px solid var(--line);
+    padding: 7px 14px; border-radius: 6px; font-size: 0.88rem; font-weight: 500;
+  }
+  .btn:hover:not(:disabled) { background: #30363d; }
+  .btn.primary { background: #238636; border-color: rgba(255,255,255,0.1); color: #fff; font-weight: 600; }
+  .btn.primary:hover:not(:disabled) { background: #2ea043; }
+  .btn.danger { color: var(--bad); }
+  .btn.danger.armed { background: var(--bad); color: #fff; border-color: var(--bad); }
+  .btn.small { padding: 4px 10px; font-size: 0.82rem; }
+  .btn.icon { width: 30px; height: 30px; padding: 0; display: inline-grid; place-items: center; color: var(--muted); }
+  .btn.icon:hover:not(:disabled) { color: var(--bad); }
+  .btn:disabled { color: var(--muted); cursor: not-allowed; opacity: 0.7; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .notice {
+    padding: 12px 16px; border-radius: 8px; font-size: 0.88rem;
+    background: var(--warn-bg); border: 1px solid var(--warn-line); color: var(--warn);
+  }
+  .notice a { color: inherit; }
+  .callout { font-size: 0.85rem; color: var(--fg); background: var(--accent-soft); border: 1px solid rgba(47,129,247,0.35); border-radius: 6px; padding: 8px 12px; }
+
+  /* ---------- panel: 8 knobs ---------- */
+  .panel {
+    background: var(--well); border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px 16px 14px; display: flex; flex-direction: column; gap: 12px;
+  }
+  .knobs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+  .knob {
+    position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 10px 4px 8px; border-radius: 8px; border: 1px solid transparent;
+    background: transparent; color: var(--fg); min-width: 0;
+    touch-action: none;
+  }
+  .knob:hover { background: var(--raised); }
+  .knob[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+  .knob svg { width: 64px; height: 64px; display: block; }
+  .knob .k-track { stroke: var(--line); }
+  .knob .k-arc { stroke: var(--accent); }
+  .knob .k-body { fill: var(--raised); stroke: #3d444d; }
+  .knob .k-tick { stroke: var(--head); }
+  .knob .k-num { fill: var(--head); font: 600 13px var(--font); }
+  .k-sum { font-family: var(--mono); font-size: clamp(0.62rem, 2.6vw, 0.74rem); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  .knob[aria-pressed="true"] .k-sum { color: var(--fg); }
+  .k-tag {
+    position: absolute; top: 6px; right: 6px; font-size: 0.62rem; font-weight: 700; letter-spacing: 0.6px;
+    color: var(--warn); border: 1px solid var(--warn-line); border-radius: 4px; padding: 0 4px; line-height: 1.5;
+  }
+  @media (max-width: 520px) { .knob svg { width: 52px; height: 52px; } .k-tag { top: 3px; right: 3px; } }
+  .panel-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; font-size: 0.82rem; color: var(--muted); }
+  .badge { font-size: 0.75rem; font-weight: 600; color: var(--warn); }
+
+  /* ---------- sections ---------- */
+  fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+  fieldset:disabled .group { opacity: 0.55; }
+  .groups { display: flex; flex-direction: column; gap: 28px; }
+  .group { display: flex; flex-direction: column; gap: 4px; }
+  .group-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; margin-bottom: 6px; }
+  .group-title {
+    margin: 0; font-size: 0.78rem; font-weight: 600; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.8px;
+  }
+  .group-title strong { color: var(--head); font-size: 1rem; letter-spacing: 0.4px; margin-left: 6px; }
+  .row {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 20px; align-items: center;
+    padding: 12px 0; border-top: 1px solid var(--line);
+  }
+  .group .row:first-of-type { border-top: 0; padding-top: 4px; }
+  .row > .ctl { justify-self: end; }
+  @media (max-width: 600px) { .row { grid-template-columns: 1fr; } .row > .ctl { justify-self: start; } }
+  .label { color: var(--head); font-weight: 500; font-size: 0.95rem; }
+  .hint { color: var(--muted); font-size: 0.83rem; }
+  .panel-name { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; margin-left: 6px; white-space: nowrap; }
+
+  .seg { display: inline-flex; flex-wrap: wrap; background: var(--well); border: 1px solid var(--line); border-radius: 7px; padding: 3px; gap: 2px; }
+  .seg label { position: relative; }
+  .seg input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+  .seg span {
+    display: block; padding: 5px 12px; border-radius: 5px; font-size: 0.86rem; color: var(--fg);
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .seg.tight span { padding: 4px 8px; font-family: var(--mono); font-size: 0.78rem; }
+  .seg input:checked + span { background: var(--accent); color: #fff; font-weight: 600; }
+  .seg input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .seg input:disabled + span { color: var(--muted); }
+  .seg label:hover input:not(:checked):not(:disabled) + span { background: var(--raised); }
+
+  .switch { position: relative; display: inline-flex; align-items: center; gap: 10px; cursor: pointer; font-size: 0.88rem; }
+  .switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .switch .track { width: 40px; height: 22px; border-radius: 11px; background: var(--raised); border: 1px solid var(--line); position: relative; transition: background 0.15s; }
+  .switch .track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--muted); transition: transform 0.15s, background 0.15s; }
+  .switch input:checked + .track { background: var(--accent); border-color: var(--accent); }
+  .switch input:checked + .track::after { transform: translateX(18px); background: #fff; }
+  .switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  input[type="number"], select {
+    background: var(--well); color: var(--head); border: 1px solid var(--line);
+    border-radius: 6px; padding: 5px 8px; font-family: var(--mono); font-size: 0.9rem; min-width: 0;
+  }
+  input[type="number"] { width: 64px; text-align: right; }
+  select { padding-right: 4px; }
+  input:disabled, select:disabled { color: var(--muted); }
+
+  /* ---------- message list ---------- */
+  .msgs { display: flex; flex-direction: column; gap: 8px; }
+  .msg-head, .msg {
+    display: grid;
+    grid-template-columns: 28px 92px minmax(150px, 1.2fr) 172px 136px 88px 30px;
+    gap: 10px; align-items: center;
+  }
+  .msg-head { font-size: 0.74rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; padding: 0 12px; }
+  .msg { background: var(--well); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  .msg-n { font-family: var(--mono); color: var(--muted); font-size: 0.85rem; }
+  .f { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .f-label { display: none; font-size: 0.74rem; color: var(--muted); }
+  .cc { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .cc-name { font-size: 0.8rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .range { display: flex; align-items: center; gap: 6px; }
+  .range input { width: 56px; }
+  .range span { color: var(--muted); }
+  .out { display: flex; align-items: center; gap: 8px; }
+  .out svg { width: 44px; height: 32px; flex: none; }
+  .out .c-box { fill: none; stroke: var(--line); }
+  .out .c-line { fill: none; stroke: var(--accent); stroke-width: 1.5; }
+  .out .c-dot { fill: var(--head); }
+  .out-val { font-family: var(--mono); color: var(--head); font-size: 0.9rem; font-variant-numeric: tabular-nums; min-width: 3ch; text-align: right; }
+  @media (max-width: 800px) {
+    .msg-head { display: none; }
+    .msg {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+      grid-template-areas: "n n del" "ch cc cc" "curve curve curve" "range range out";
+      gap: 10px 12px;
+    }
+    .msg-n { grid-area: n; }
+    .msg > .f-ch { grid-area: ch; } .msg > .f-cc { grid-area: cc; } .msg > .f-curve { grid-area: curve; }
+    .msg > .f-range { grid-area: range; } .msg > .f-out { grid-area: out; justify-self: end; } .msg > .del { grid-area: del; justify-self: end; }
+    .f-label { display: block; }
+    .f-ch select { width: 100%; }
+  }
+  .msg-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin-top: 4px; }
+  .msg-actions .left, .msg-actions .right { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .count { font-size: 0.83rem; color: var(--muted); }
+
+  .order { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+  .order label { display: flex; flex-direction: column; gap: 2px; font-size: 0.74rem; color: var(--muted); }
+  .order input { width: 100%; }
+  @media (max-width: 520px) { .order { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+  footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; align-items: center; padding-top: 20px; border-top: 1px solid var(--line); background: var(--card); padding-bottom: 4px; }
+  @media (min-width: 700px) and (min-height: 600px) { footer { position: sticky; bottom: 0; } }
+  .save { font-size: 0.85rem; color: var(--muted); display: flex; align-items: center; gap: 8px; flex: 1 1 260px; }
+  .save.pending { color: var(--warn); }
+  .save.ok { color: var(--ok); }
+  .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+  .extras { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; align-items: center; font-size: 0.85rem; color: var(--muted); }
+  .extras .actions { gap: 8px; }
+
+  details { font-size: 0.88rem; color: var(--muted); }
+  details summary { cursor: pointer; color: var(--fg); }
+  details ul { margin: 8px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+  details a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back-link" href="./">&lsaquo; All tools</a>
+  <header>
+    <div class="brand">.axs instruments</div>
+    <h1>MC8P Editor</h1>
+    <p class="sub">Set what every knob sends, plus scenes and display settings, over USB. Plug MC8P into this computer, then connect.</p>
+  </header>
+
+  <section class="conn" aria-live="polite">
+    <div class="conn-status">
+      <span class="dot" id="dot"></span>
+      <div class="conn-text">
+        <span class="conn-title" id="connTitle">Not connected</span>
+        <span class="conn-detail" id="connDetail">Needs Chrome or Edge on a computer, and MC8P firmware 3.2 or later.</span>
+      </div>
+    </div>
+    <div class="conn-actions">
+      <button class="btn primary" id="btnConnect" type="button">Connect MC8P</button>
+      <button class="btn" id="btnDemo" type="button">Try demo</button>
+    </div>
+  </section>
+
+  <div class="notice" id="notice" hidden></div>
+
+  <section class="panel" aria-label="Knobs">
+    <div class="knobs" id="knobs" role="group" aria-label="Choose a knob to edit"></div>
+    <div class="panel-foot">
+      <span id="panelHint">Pick a knob to edit what it sends.</span>
+      <span id="panelState"></span>
+    </div>
+  </section>
+
+  <div class="callout" id="menuCallout" hidden></div>
+
+  <fieldset id="settings" disabled>
+    <div class="groups">
+
+      <section class="group" aria-labelledby="gPot">
+        <div class="group-head">
+          <h2 class="group-title" id="gPot">Knob<strong id="potTitle">1</strong></h2>
+          <span class="hint">Every message is sent each time this knob moves.</span>
+        </div>
+        <div class="msg-head" aria-hidden="true">
+          <span>#</span><span>Channel</span><span>CC</span><span>Curve</span><span>Range</span><span>Now</span><span></span>
+        </div>
+        <div class="msgs" id="msgs"></div>
+        <div class="msg-actions">
+          <div class="left">
+            <button class="btn small" id="btnAdd" type="button">+ Add message</button>
+            <span class="count" id="msgCount"></span>
+          </div>
+          <div class="right">
+            <label class="count" for="copyTo">Copy these messages to</label>
+            <select id="copyTo"></select>
+          </div>
+        </div>
+      </section>
+
+      <section class="group" aria-labelledby="gScene">
+        <div class="group-head"><h2 class="group-title" id="gScene">Scenes</h2>
+          <span class="hint">PREV and NEXT on the main screen step through scenes.</span></div>
+        <div class="row">
+          <div><div class="label">Scene CC <span class="panel-name">CC</span></div>
+            <div class="hint">Sent on MIDI channel 1 each time the scene changes. The scene number is the CC value (scene 1 = 0).</div></div>
+          <div class="ctl"><input type="number" id="sceneCC" min="0" max="127" aria-label="Scene CC number"></div>
+        </div>
+        <div class="row">
+          <div><div class="label">Mode <span class="panel-name">MODE</span></div>
+            <div class="hint" id="modeHint"></div></div>
+          <div class="seg ctl" role="radiogroup" aria-label="Scene mode">
+            <label><input type="radio" name="smode" id="smode0" value="0"><span>Step</span></label>
+            <label><input type="radio" name="smode" id="smode1" value="1"><span>Custom</span></label>
+          </div>
+        </div>
+        <div class="row" id="rowLen">
+          <div><div class="label">Custom length <span class="panel-name">LEN</span></div>
+            <div class="hint">How many steps the custom list has, 1 to 12.</div></div>
+          <div class="ctl"><input type="number" id="sceneLen" min="1" max="12" aria-label="Custom list length"></div>
+        </div>
+        <div class="row" id="rowOrder">
+          <div style="grid-column: 1 / -1"><div class="label">Custom order</div>
+            <div class="hint">The scene each step jumps to, 1 to 99.</div></div>
+          <div class="order" id="order" style="grid-column: 1 / -1"></div>
+        </div>
+      </section>
+
+      <section class="group" aria-labelledby="gPanel">
+        <div class="group-head"><h2 class="group-title" id="gPanel">Panel</h2></div>
+        <div class="row">
+          <div><div class="label">Edit knob <span class="panel-name">EDIT POT</span></div>
+            <div class="hint">The knob that sets values in the panel's own ASSIGN and SCENES menus. It still sends its messages on the main screen.</div></div>
+          <div class="seg tight ctl" role="radiogroup" aria-label="Edit knob" id="segEdit"></div>
+        </div>
+        <div class="row">
+          <div><div class="label">Display theme <span class="panel-name">THEME</span></div>
+            <div class="hint">Main screen layout.</div></div>
+          <div class="seg ctl" role="radiogroup" aria-label="Display theme">
+            <label><input type="radio" name="theme" id="theme0" value="0"><span>MkII</span></label>
+            <label><input type="radio" name="theme" id="theme1" value="1"><span>MkI</span></label>
+            <label><input type="radio" name="theme" id="theme2" value="2"><span>YX</span></label>
+          </div>
+        </div>
+        <div class="row">
+          <div><div class="label">Invert display <span class="panel-name">INVERT</span></div>
+            <div class="hint" id="invHint"></div></div>
+          <label class="switch ctl"><input type="checkbox" id="inv"><span class="track"></span><span id="invText">Off</span></label>
+        </div>
+      </section>
+
+      <section class="extras" aria-label="Backups">
+        <span>Keep a copy of every setting on this computer, or load one back.</span>
+        <div class="actions">
+          <button class="btn small" id="btnExport" type="button">Download backup</button>
+          <button class="btn small" id="btnImport" type="button">Load backup&hellip;</button>
+          <input type="file" id="importFile" accept=".json,application/json" hidden>
+        </div>
+      </section>
+    </div>
+  </fieldset>
+
+  <footer>
+    <div class="save" id="save" aria-live="polite">Connect to see MC8P's settings.</div>
+    <div class="actions">
+      <button class="btn danger" id="btnReset" type="button" disabled>Factory reset</button>
+      <button class="btn" id="btnResetCancel" type="button" hidden>Cancel</button>
+      <button class="btn" id="btnRevert" type="button" disabled>Undo changes</button>
+      <button class="btn primary" id="btnSave" type="button" disabled>Save to MC8P</button>
+    </div>
+  </footer>
+
+  <details>
+    <summary>Can't connect?</summary>
+    <ul>
+      <li>Use Chrome or Edge on a computer. Safari and phones don't support Web MIDI.</li>
+      <li>When the browser asks to control MIDI devices, choose Allow. If you blocked it, use the icon in the address bar to allow it again.</li>
+      <li>Close any app that has MC8P open (a DAW, MIDI monitor). On Windows only one program can use a MIDI port at a time.</li>
+      <li>The editor needs firmware 3.2 or later. Update with the <a href="./#flash" target="_blank" rel="noopener">firmware flasher</a>. Flashing keeps your saved settings: they live on MC8P's separate settings chip.</li>
+      <li>Previews embedded in another site may be blocked from MIDI devices. Open this page directly in its own tab.</li>
+    </ul>
+  </details>
+</div>
+
+<script>
+(() => {
+  // ---------------- Protocol (matches firmware 3.2, SYSEX_PROTO 1) ----------------
+  const HDR = [0xF0, 0x7D, 0x4D, 0x38];
+  const CMD = { INFO: 0x01, GET_POT: 0x02, SET_POT: 0x03, GET_GLOBAL: 0x04, SET_GLOBAL: 0x05, STATUS: 0x06, SAVE: 0x07, REVERT: 0x08, RESET: 0x09 };
+  const RPL = { INFO: 0x41, POT: 0x42, GLOBAL: 0x44, STATUS: 0x46 };
+  const N_POTS = 8, MAX_MSGS = 10, MAX_SCENES = 12;
+  const OMNI = 16;
+  const CURVES = ['NOR', 'INV', 'LOG', 'ILG'];
+  const CURVE_HINT = ['Normal: low to high', 'Inverted: high to low', 'Log: fine at the bottom, fast at the top', 'Inverse log: falls fast, then fine'];
+  const THEMES = ['MkII', 'MkI', 'YX'];
+  const SCREENS = ['main screen', 'menu', 'ASSIGN menu', 'SETTINGS menu', 'ASSIGN settings', 'DISPLAY settings', 'ABOUT screen', 'RESET screen', 'save prompt', 'reset prompt', 'SCENES menu'];
+
+  const msg = (cmd, ...data) => [...HDR, cmd, ...data, 0xF7];
+  const isOurs = d => d.length >= 6 && d[0] === 0xF0 && d[1] === 0x7D && d[2] === 0x4D && d[3] === 0x38;
+
+  const encodePot = (pot, list) => msg(CMD.SET_POT, pot, list.length, ...list.flatMap(m => [m.ch, m.cc, m.curve, m.min, m.max]));
+  const globalBytes = g => [g.editPot, g.sceneCC, g.sceneMode, g.customLen, ...g.order, g.theme, g.inverted ? 1 : 0];
+  const encodeGlobal = g => msg(CMD.SET_GLOBAL, ...globalBytes(g));
+
+  function decodePot(d) {            // 42 <pot> <count> {...}
+    const pot = d[5], count = d[6], list = [];
+    if (pot >= N_POTS || count < 1 || count > MAX_MSGS || d.length < 8 + count * 5) return null;
+    for (let j = 0; j < count; j++) {
+      const o = 7 + j * 5;
+      list.push({ ch: d[o], cc: d[o + 1], curve: d[o + 2], min: d[o + 3], max: d[o + 4] });
+    }
+    return { pot, list };
+  }
+  function decodeGlobal(d) {         // 44 <18 bytes>
+    if (d.length < 6 + 6 + MAX_SCENES) return null;
+    const p = d.slice(5);
+    return { editPot: p[0], sceneCC: p[1], sceneMode: p[2], customLen: p[3], order: p.slice(4, 4 + MAX_SCENES),
+             theme: p[4 + MAX_SCENES], inverted: !!p[5 + MAX_SCENES] };
+  }
+  function decodeStatus(d) {         // 46 <flags> <screen> <ms lo hi> <gs lo hi> <pots 8x lo hi> <scene> <pos>
+    if (d.length < 30) return null;
+    const raw = [];
+    for (let i = 0; i < N_POTS; i++) raw.push(d[11 + i * 2] | (d[12 + i * 2] << 7));
+    return {
+      midiUnsaved: !!(d[5] & 1), globalUnsaved: !!(d[5] & 2), override: !!(d[5] & 4), inMenu: !!(d[5] & 8),
+      screen: d[6], midiSum: d[7] | (d[8] << 7), globalSum: d[9] | (d[10] << 7), raw, scene: d[27], scenePos: d[28],
+    };
+  }
+
+  // Same checksums as midiConfigSum() / globalConfigSum() in the firmware
+  function fletcher(bytes) {
+    let a = 0, b = 0;
+    for (const v of bytes) { a = (a + v) % 255; b = (b + a) % 255; }
+    return ((b << 8) | a) & 0x3FFF;
+  }
+  const midiSum = pots => fletcher(pots.flatMap(list => [list.length, ...list.flatMap(m => [m.ch, m.cc, m.curve, m.min, m.max])]));
+  const globalSum = g => fletcher(globalBytes(g));
+
+  // Same as mapMidiValueWithParams() in the firmware (raw = 0..1023)
+  function mapValue(raw, min, max, curve) {
+    const x = raw / 1023;
+    const t = curve === 2 ? x * x : curve === 3 ? 1 - x * x : curve === 1 ? 1 - x : x;
+    const v = min <= max ? Math.trunc(min + t * (max - min)) : Math.trunc(max + (1 - t) * (min - max));
+    return Math.max(Math.min(min, max), Math.min(Math.max(min, max), v));
+  }
+
+  // ---------------- Defaults (same as factoryReset()) ----------------
+  const defaultPots = () => Array.from({ length: N_POTS }, (_, i) => [{ ch: i, cc: 7, curve: 0, min: 0, max: 127 }]);
+  const defaultGlobal = () => ({ editPot: 7, sceneCC: 82, sceneMode: 0, customLen: 6, order: [...Array(MAX_SCENES).keys()], theme: 0, inverted: true });
+  const clone = o => JSON.parse(JSON.stringify(o));
+
+  // ---------------- Demo device: a small model of the firmware ----------------
+  class DemoMC8P {
+    constructor(onMessage) {
+      this.onMessage = onMessage;
+      this.pots = defaultPots();
+      this.pots[0] = [{ ch: 0, cc: 74, curve: 0, min: 0, max: 127 }, { ch: 0, cc: 71, curve: 2, min: 20, max: 100 }];
+      this.pots[1] = [{ ch: 0, cc: 1, curve: 0, min: 0, max: 127 }];
+      this.global = defaultGlobal();
+      this.saved = { pots: clone(this.pots), global: clone(this.global) };
+      this.raw = [700, 300, 512, 900, 100, 640, 420, 1023];
+      this.scenePos = 0;
+      this.name = 'Demo MC8P';
+      this.t0 = performance.now();
+    }
+    close() {}
+    setRaw(i, v) { this.raw[i] = Math.max(0, Math.min(1023, Math.round(v))); }
+    status() {
+      const ms = midiSum(this.pots), gs = globalSum(this.global);
+      const out = [...HDR, RPL.STATUS,
+        (ms !== midiSum(this.saved.pots) ? 1 : 0) | (gs !== globalSum(this.saved.global) ? 2 : 0),
+        0, ms & 0x7F, ms >> 7, gs & 0x7F, gs >> 7];
+      for (const v of this.raw) out.push(v & 0x7F, v >> 7);
+      const g = this.global;
+      out.push(g.sceneMode ? g.order[this.scenePos] || 0 : this.scenePos, this.scenePos, 0xF7);
+      return out;
+    }
+    send(d) {
+      if (!isOurs(d)) return;
+      const p = d.slice(5, -1);
+      switch (d[4]) {
+        case CMD.INFO: return this.reply([...HDR, RPL.INFO, 1, N_POTS, MAX_MSGS, MAX_SCENES, ...[...'3.2'].map(c => c.charCodeAt(0)), 0xF7]);
+        case CMD.GET_POT: return this.replyPot(p[0]);
+        case CMD.SET_POT: {
+          const r = decodePot([0, 0, 0, 0, 0, ...p, 0xF7]);
+          if (r && r.list.every(m => m.ch <= 16 && m.cc <= 127 && m.curve <= 3 && m.min <= 127 && m.max <= 127)) {
+            r.list.forEach(m => { if (m.min > m.max) m.max = m.min; });
+            this.pots[r.pot] = r.list;
+          }
+          return this.replyPot(p[0]);
+        }
+        case CMD.GET_GLOBAL: return this.replyGlobal();
+        case CMD.SET_GLOBAL: {
+          const g = decodeGlobal([0, 0, 0, 0, 0, ...p, 0xF7]);
+          if (g && g.editPot < 8 && g.sceneCC <= 127 && g.sceneMode <= 1 && g.customLen >= 1 && g.customLen <= 12 &&
+              g.order.every(v => v <= 98) && g.theme < 3) this.global = g;
+          return this.replyGlobal();
+        }
+        case CMD.STATUS: return this.reply(this.status());
+        case CMD.SAVE:
+          if (p[0] === 0x53 && p[1] === 0x41 && p[2] === 0x56) this.saved = { pots: clone(this.pots), global: clone(this.global) };
+          return this.reply(this.status());
+        case CMD.REVERT:
+          this.pots = clone(this.saved.pots); this.global = clone(this.saved.global);
+          return this.reply(this.status());
+        case CMD.RESET:
+          if (p[0] === 0x44 && p[1] === 0x45 && p[2] === 0x46) {
+            this.pots = defaultPots(); this.global = defaultGlobal();
+            this.saved = { pots: clone(this.pots), global: clone(this.global) };
+          }
+          return this.reply(this.status());
+      }
+    }
+    replyPot(i) {
+      const list = this.pots[i];
+      if (!list) return;
+      this.reply([...HDR, RPL.POT, i, list.length, ...list.flatMap(m => [m.ch, m.cc, m.curve, m.min, m.max]), 0xF7]);
+    }
+    replyGlobal() { this.reply([...HDR, RPL.GLOBAL, ...globalBytes(this.global), 0xF7]); }
+    reply(bytes) { setTimeout(() => this.onMessage(Uint8Array.from(bytes)), 6); }
+  }
+
+  // ---------------- Common CC names ----------------
+  const CC_NAMES = {
+    0: 'Bank select', 1: 'Mod wheel', 2: 'Breath', 4: 'Foot pedal', 5: 'Portamento time', 7: 'Volume', 8: 'Balance',
+    10: 'Pan', 11: 'Expression', 12: 'Effect 1', 13: 'Effect 2', 64: 'Sustain', 65: 'Portamento', 66: 'Sostenuto',
+    67: 'Soft pedal', 68: 'Legato', 69: 'Hold 2', 70: 'Sound variation', 71: 'Resonance', 72: 'Release', 73: 'Attack',
+    74: 'Cutoff', 75: 'Decay', 76: 'Vibrato rate', 77: 'Vibrato depth', 78: 'Vibrato delay', 84: 'Portamento control',
+    91: 'Reverb', 92: 'Tremolo', 93: 'Chorus', 94: 'Detune', 95: 'Phaser', 120: 'All sound off', 121: 'Reset controllers',
+    122: 'Local control', 123: 'All notes off',
+  };
+  const ccName = n => CC_NAMES[n] || (n >= 120 ? 'Channel mode' : '');
+
+  // ---------------- DOM ----------------
+  const $ = id => document.getElementById(id);
+  const ui = {
+    dot: $('dot'), title: $('connTitle'), detail: $('connDetail'), notice: $('notice'),
+    connect: $('btnConnect'), demo: $('btnDemo'), settings: $('settings'),
+    knobs: $('knobs'), panelHint: $('panelHint'), panelState: $('panelState'), menuCallout: $('menuCallout'),
+    msgs: $('msgs'), potTitle: $('potTitle'), add: $('btnAdd'), msgCount: $('msgCount'), copyTo: $('copyTo'),
+    save: $('save'), saveBtn: $('btnSave'), revert: $('btnRevert'), reset: $('btnReset'), resetCancel: $('btnResetCancel'),
+  };
+
+  // Knobs: 270° sweep like a real pot, arc shows where it is now
+  const ARC_R = 26, ARC_LEN = 2 * Math.PI * ARC_R * 0.75;
+  const knobEls = [];
+  for (let i = 0; i < N_POTS; i++) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'knob'; b.setAttribute('aria-pressed', 'false');
+    b.innerHTML = `
+      <span class="k-tag" hidden>EDIT</span>
+      <svg viewBox="0 0 64 64" aria-hidden="true">
+        <circle class="k-track" cx="32" cy="32" r="${ARC_R}" fill="none" stroke-width="4" stroke-linecap="round"
+          stroke-dasharray="${ARC_LEN} 999" transform="rotate(135 32 32)"/>
+        <circle class="k-arc" cx="32" cy="32" r="${ARC_R}" fill="none" stroke-width="4" stroke-linecap="round"
+          stroke-dasharray="0 999" transform="rotate(135 32 32)"/>
+        <circle class="k-body" cx="32" cy="32" r="18" stroke-width="1"/>
+        <line class="k-tick" x1="32" y1="20" x2="32" y2="15" stroke-width="2.5" stroke-linecap="round"/>
+        <text class="k-num" x="32" y="36.5" text-anchor="middle">${i + 1}</text>
+      </svg>
+      <span class="k-sum"></span>`;
+    b.addEventListener('click', () => { if (!b.dataset.dragged) selectPot(i); delete b.dataset.dragged; });
+    // Demo only: drag up/down to turn the knob
+    b.addEventListener('pointerdown', e => {
+      if (!link || link.kind !== 'demo') return;
+      const startY = e.clientY, start = demoDevice().raw[i];
+      b.setPointerCapture(e.pointerId);
+      const move = ev => { if (Math.abs(ev.clientY - startY) > 3) { b.dataset.dragged = '1'; demoDevice().setRaw(i, start + (startY - ev.clientY) * 6); } };
+      const up = () => { b.removeEventListener('pointermove', move); b.removeEventListener('pointerup', up); b.removeEventListener('pointercancel', up); };
+      b.addEventListener('pointermove', move); b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
+    });
+    ui.knobs.appendChild(b);
+    knobEls.push({ btn: b, arc: b.querySelector('.k-arc'), tick: b.querySelector('.k-tick'), sum: b.querySelector('.k-sum'), tag: b.querySelector('.k-tag') });
+  }
+
+  $('segEdit').innerHTML = Array.from({ length: N_POTS }, (_, i) =>
+    `<label><input type="radio" name="editpot" id="editpot${i}" value="${i}"><span>${i + 1}</span></label>`).join('');
+  $('order').innerHTML = Array.from({ length: MAX_SCENES }, (_, i) =>
+    `<label>Step ${i + 1}<input type="number" min="1" max="99" id="order${i}" aria-label="Custom step ${i + 1} scene"></label>`).join('');
+
+  // ---------------- State ----------------
+  let link = null;                 // { send(bytes), close(), name, kind }
+  let midiAccess = null;
+  let pots = defaultPots();        // what the editor shows (and has sent)
+  let global = defaultGlobal();
+  let status = null;
+  let loaded = false;              // have we read the device's settings yet?
+  let selected = 0;
+  const demoDevice = () => link && link.dev;
+
+  function setConn(kind, title, detail) {
+    ui.dot.className = 'dot' + (kind ? ' ' + kind : '');
+    ui.title.textContent = title;
+    ui.detail.textContent = detail;
+  }
+  function showNotice(html) { ui.notice.innerHTML = html; ui.notice.hidden = !html; }
+
+  // ---------------- Request queue: one message in flight at a time ----------------
+  // MC8P answers from its main loop, so requests go one by one. A queued SET for the
+  // same knob is replaced by the newer one rather than sent twice.
+  let queue = [], inflight = null, misses = 0, infoWaiter = null;
+
+  function request(bytes, expect, key) {
+    if (!link) return Promise.resolve(null);
+    if (key) {
+      const q = queue.find(x => x.key === key);
+      if (q) { q.bytes = bytes; return q.promise; }
+    }
+    let resolve;
+    const promise = new Promise(r => { resolve = r; });
+    queue.push({ bytes, expect, key, resolve, promise });
+    pump();
+    return promise;
+  }
+  function pump() {
+    if (inflight || !queue.length || !link) return;
+    const item = inflight = queue.shift();
+    try { link.send(item.bytes); } catch (e) { lost('Sending to MC8P failed: ' + e.message); return; }
+    item.timer = setTimeout(() => {
+      if (inflight !== item) return;
+      inflight = null; item.resolve(null);
+      if (++misses >= 4 && link && link.kind === 'midi') setConn('err', 'MC8P not responding', 'Check the USB cable. The editor keeps trying.');
+      pump();
+    }, 900);
+  }
+  function onMessage(data) {
+    const d = Array.from(data);
+    if (!isOurs(d)) return;                         // CC from the knobs etc.
+    if (d[4] === RPL.INFO && infoWaiter) {
+      infoWaiter({ proto: d[5], fw: String.fromCharCode(...d.slice(9, -1)) });
+      infoWaiter = null;
+      return;
+    }
+    if (inflight && d[4] === inflight.expect) {
+      const item = inflight;
+      inflight = null; clearTimeout(item.timer);
+      if (misses >= 4 && link && link.kind === 'midi') setConn('on', 'Connected to ' + link.name, 'Firmware ' + link.fw);
+      misses = 0;
+      item.resolve(d);
+      pump();
+    }
+  }
+
+  // ---------------- Reading from MC8P ----------------
+  let editSeq = Array(N_POTS).fill(0), globalSeq = 0;   // bumps on every local edit
+  let refreshing = false;
+
+  async function readAll() {
+    if (refreshing) return true;
+    refreshing = true;
+    const seqs = editSeq.slice(), gseq = globalSeq;
+    for (let i = 0; i < N_POTS; i++) {
+      const d = await request(msg(CMD.GET_POT, i), RPL.POT);
+      const r = d && decodePot(d);
+      if (!link) { refreshing = false; return false; }
+      if (!r) { refreshing = false; return false; }
+      if (editSeq[i] === seqs[i]) pots[r.pot] = r.list;
+    }
+    const g = await request(msg(CMD.GET_GLOBAL), RPL.GLOBAL);
+    const gr = g && decodeGlobal(g);
+    refreshing = false;
+    if (!gr) return false;
+    if (globalSeq === gseq) global = gr;
+    loaded = true;
+    render();
+    return true;
+  }
+
+  let pollTimer = null;
+  function startPolling() {
+    clearInterval(pollTimer);
+    pollTimer = setInterval(async () => {
+      if (!link || document.hidden || inflight || queue.length || refreshing || editsWaiting()) return;
+      const d = await request(msg(CMD.STATUS), RPL.STATUS);
+      const s = d && decodeStatus(d);
+      if (!s || !link) return;
+      status = s;
+      // Changed on the panel (or by another editor)? Read it again.
+      if (loaded && !queue.length && !inflight && !editsWaiting() && (s.midiSum !== midiSum(pots) || s.globalSum !== globalSum(global))) readAll();
+      renderLive();
+      renderSave();
+    }, 150);
+  }
+
+  // ---------------- Sending changes ----------------
+  const potTimers = [];
+  const editsWaiting = () => potTimers.some(t => t) || !!globalTimer || queue.some(q => q.key) || !!(inflight && inflight.key);
+  function commitPot(i, now) {
+    editSeq[i]++;
+    render();
+    clearTimeout(potTimers[i]);
+    const go = async () => {
+      const seq = editSeq[i];
+      const d = await request(encodePot(i, pots[i]), RPL.POT, 'pot' + i);
+      const r = d && decodePot(d);
+      if (r && r.pot === i && seq === editSeq[i]) { pots[i] = r.list; render(); }
+    };
+    potTimers[i] = null;
+    if (now) go(); else potTimers[i] = setTimeout(() => { potTimers[i] = null; go(); }, 120);
+  }
+  let globalTimer = null;
+  function commitGlobal(now) {
+    globalSeq++;
+    render();
+    clearTimeout(globalTimer);
+    const go = async () => {
+      const seq = globalSeq;
+      const d = await request(encodeGlobal(global), RPL.GLOBAL, 'global');
+      const g = d && decodeGlobal(d);
+      if (g && seq === globalSeq) { global = g; render(); }
+    };
+    globalTimer = null;
+    if (now) go(); else globalTimer = setTimeout(() => { globalTimer = null; go(); }, 120);
+  }
+  function flushEdits() {          // send anything waiting on a debounce now
+    potTimers.forEach((t, i) => { if (t) { clearTimeout(t); potTimers[i] = null; commitPotNow(i); } });
+    if (globalTimer) { clearTimeout(globalTimer); globalTimer = null; request(encodeGlobal(global), RPL.GLOBAL, 'global'); }
+  }
+  function commitPotNow(i) { request(encodePot(i, pots[i]), RPL.POT, 'pot' + i); }
+
+  // ---------------- Connect / disconnect ----------------
+  function attach(newLink, kind, detail) {
+    link = newLink; link.kind = kind;
+    queue = []; inflight = null; misses = 0; loaded = false; status = null;
+    ui.connect.textContent = 'Disconnect';
+    ui.demo.hidden = kind === 'midi';
+    ui.connect.hidden = kind === 'demo';
+    if (kind === 'demo') {
+      ui.demo.textContent = 'Stop demo';
+      setConn('demo', 'Demo device', 'Nothing is sent to real hardware. Drag a knob up or down to turn it.');
+    } else setConn('on', 'Connected to ' + link.name, detail);
+    ui.save.className = 'save'; ui.save.textContent = 'Reading MC8P’s settings…';
+    readAll().then(ok => {
+      if (!link) return;
+      if (!ok) { lost('Couldn’t read MC8P’s settings. Connect again.'); return; }
+      ui.settings.disabled = false;
+      ui.reset.disabled = false;
+      startPolling();
+    });
+  }
+
+  function detach(title, detail) {
+    clearInterval(pollTimer);
+    potTimers.forEach((t, i) => { clearTimeout(t); potTimers[i] = null; }); clearTimeout(globalTimer); globalTimer = null;
+    if (inflight) { clearTimeout(inflight.timer); inflight.resolve(null); }
+    queue.forEach(q => q.resolve(null));
+    queue = []; inflight = null;
+    if (link) try { link.close(); } catch (e) {}
+    link = null; status = null; loaded = false;
+    ui.settings.disabled = true;
+    ui.reset.disabled = true; disarmReset();
+    ui.connect.textContent = 'Connect MC8P';
+    ui.demo.hidden = false; ui.demo.textContent = 'Try demo'; ui.connect.hidden = false;
+    setConn('', title || 'Not connected', detail || 'Needs Chrome or Edge on a computer, and MC8P firmware 3.2 or later.');
+    pots = defaultPots(); global = defaultGlobal();
+    render();
+  }
+  function lost(why) { detach('Disconnected', why); }
+
+  // ---------------- Web MIDI ----------------
+  const isMC8P = p => /mc8p/i.test(p.name || '') && p.state !== 'disconnected';
+
+  function askInfo(out) {
+    return new Promise(res => {
+      infoWaiter = res;
+      try { out.send(msg(CMD.INFO)); } catch (e) {}
+      setTimeout(() => { if (infoWaiter === res) { infoWaiter = null; res(null); } }, 600);
+    });
+  }
+
+  async function connectMidi() {
+    showNotice('');
+    if (!navigator.requestMIDIAccess) {
+      showNotice('This browser doesn’t support Web MIDI. Open this page in Chrome or Edge on a computer.');
+      return;
+    }
+    setConn('', 'Connecting…', 'Allow MIDI access if the browser asks.');
+    try {
+      midiAccess = midiAccess || await navigator.requestMIDIAccess({ sysex: true });
+    } catch (e) {
+      detach('MIDI access refused', '');
+      showNotice('The browser refused MIDI access. Allow MIDI devices for this site using the icon in the address bar, then connect again. ' +
+        'Previews embedded inside another site can’t reach MIDI devices at all; open the page in its own tab.');
+      return;
+    }
+    midiAccess.onstatechange = onPortChange;
+
+    const outs = [...midiAccess.outputs.values()].filter(p => p.state !== 'disconnected');
+    const ins = [...midiAccess.inputs.values()].filter(p => p.state !== 'disconnected');
+    // Ports named MC8P first; if the system names them differently, ask every port
+    const named = outs.filter(isMC8P);
+    const tryOuts = named.length ? named : outs;
+    const tryIns = ins.filter(isMC8P).length ? ins.filter(isMC8P) : ins;
+    if (!tryOuts.length || !tryIns.length) {
+      detach('No MC8P found', 'Plug MC8P in with a USB-C data cable and connect again.');
+      return;
+    }
+
+    let found = null;
+    for (const out of tryOuts) {
+      let heardOn = null;
+      const handlers = tryIns.map(inp => {
+        const h = e => { if (isOurs(Array.from(e.data))) heardOn = inp; onMessage(e.data); };
+        inp.addEventListener('midimessage', h);
+        return [inp, h];
+      });
+      await Promise.all(tryIns.map(inp => inp.open().catch(() => {})));
+      try { await out.open(); } catch (e) { handlers.forEach(([inp, h]) => inp.removeEventListener('midimessage', h)); continue; }
+      let info = null;
+      for (let attempt = 0; attempt < 3 && !info; attempt++) info = await askInfo(out);
+      handlers.forEach(([inp, h]) => inp.removeEventListener('midimessage', h));
+      if (info && heardOn) { found = { out, inp: heardOn, info }; break; }
+    }
+
+    if (!found) {
+      if (named.length) {
+        detach('MC8P didn’t answer', '');
+        showNotice('MC8P is plugged in but didn’t reply. The editor needs firmware 3.2 or later: update it with the ' +
+          '<a href="./#flash" target="_blank" rel="noopener">firmware flasher</a>, then connect again. ' +
+          'If it’s open in a DAW or another program, close that first.');
+      } else {
+        detach('No MC8P found', 'Plug MC8P in with a USB-C data cable and connect again.');
+      }
+      return;
+    }
+    if (found.info.proto !== 1) {
+      detach('Firmware not supported', '');
+      showNotice(`This MC8P runs firmware ${found.info.fw}, which this editor doesn’t understand. Reload this page to get the newest editor, or update MC8P with the <a href="./#flash">firmware flasher</a>.`);
+      return;
+    }
+    const { out, inp } = found;
+    try { await inp.open(); } catch (e) {
+      detach('MC8P is busy', 'Another program is using MC8P’s MIDI port. Close it and connect again.');
+      return;
+    }
+    const handler = e => onMessage(e.data);
+    inp.addEventListener('midimessage', handler);
+    attach({ send: b => out.send(b), close: () => inp.removeEventListener('midimessage', handler), name: out.name || 'MC8P', fw: found.info.fw, portId: out.id },
+      'midi', 'Firmware ' + found.info.fw);
+  }
+
+  let autoReconnect = false;
+  function onPortChange(e) {
+    if (e.port.state === 'disconnected' && link && link.kind === 'midi' && e.port.id === link.portId) {
+      autoReconnect = true;
+      lost('MC8P was unplugged. It reconnects when you plug it back in.');
+    } else if (e.port.state === 'connected' && autoReconnect && !link && isMC8P(e.port)) {
+      autoReconnect = false;
+      setTimeout(connectMidi, 600);
+    }
+  }
+
+  ui.connect.addEventListener('click', () => { if (link) { autoReconnect = false; detach(); } else connectMidi(); });
+  ui.demo.addEventListener('click', () => {
+    if (link && link.kind === 'demo') { detach(); return; }
+    showNotice('');
+    const dev = new DemoMC8P(onMessage);
+    attach({ send: b => dev.send(b), close: () => dev.close(), name: dev.name, dev }, 'demo');
+  });
+
+  // ---------------- Editing: knob messages ----------------
+  function selectPot(i) { selected = i; render(); }
+
+  const chOptions = Array.from({ length: 17 }, (_, c) => `<option value="${c}">${c === OMNI ? 'OMNI' : 'Ch ' + (c + 1)}</option>`).join('');
+
+  function buildMsgRows() {
+    const list = pots[selected];
+    if (ui.msgs.children.length !== list.length) {
+      ui.msgs.innerHTML = list.map((_, j) => `
+        <div class="msg" data-j="${j}">
+          <span class="msg-n">${j + 1}</span>
+          <div class="f f-ch"><span class="f-label">Channel</span>
+            <select data-k="ch" aria-label="Message ${j + 1} channel">${chOptions}</select></div>
+          <div class="f f-cc"><span class="f-label">CC</span>
+            <div class="cc"><input type="number" data-k="cc" min="0" max="127" aria-label="Message ${j + 1} CC number"><span class="cc-name"></span></div></div>
+          <div class="f f-curve"><span class="f-label">Curve</span>
+            <div class="seg tight" role="radiogroup" aria-label="Message ${j + 1} curve">
+              ${CURVES.map((c, k) => `<label title="${CURVE_HINT[k]}"><input type="radio" name="curve${j}" value="${k}" data-k="curve"><span>${c}</span></label>`).join('')}
+            </div></div>
+          <div class="f f-range"><span class="f-label">Range</span>
+            <div class="range"><input type="number" data-k="min" min="0" max="127" aria-label="Message ${j + 1} minimum value"><span>–</span>
+              <input type="number" data-k="max" min="0" max="127" aria-label="Message ${j + 1} maximum value"></div></div>
+          <div class="f f-out"><span class="f-label">Now</span>
+            <div class="out"><svg viewBox="0 0 44 32" aria-hidden="true"><rect class="c-box" x="0.5" y="0.5" width="43" height="31" rx="3"/>
+              <polyline class="c-line" points=""/><circle class="c-dot" r="2.5" cx="0" cy="0"/></svg><span class="out-val">–</span></div></div>
+          <button class="btn icon del" type="button" data-k="del" aria-label="Remove message ${j + 1}" title="Remove">
+            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
+        </div>`).join('');
+    }
+  }
+
+  // One listener for every message row
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  function onMsgInput(e, final) {
+    const el = e.target, row = el.closest('.msg');
+    if (!row || !el.dataset.k) return;
+    const j = +row.dataset.j, m = pots[selected][j], k = el.dataset.k;
+    if (!m) return;
+    if (k === 'ch') m.ch = +el.value;
+    else if (k === 'curve') { if (!el.checked) return; m.curve = +el.value; }
+    else if (k === 'cc' || k === 'min' || k === 'max') {
+      if (el.value === '' && !final) return;            // let them clear the box while typing
+      const v = clamp(Math.round(+el.value) || 0, 0, 127);
+      if (final) el.value = v;
+      m[k] = v;
+      // Same rule as the panel: min can't pass max
+      if (k === 'min' && m.max < v) m.max = v;
+      if (k === 'max' && m.min > v) m.min = v;
+    } else return;
+    commitPot(selected);
+  }
+  ui.msgs.addEventListener('input', e => onMsgInput(e, false));
+  ui.msgs.addEventListener('change', e => onMsgInput(e, true));
+  ui.msgs.addEventListener('click', e => {
+    const b = e.target.closest('[data-k="del"]');
+    if (!b) return;
+    const j = +b.closest('.msg').dataset.j, list = pots[selected];
+    if (list.length <= 1) return;
+    list.splice(j, 1);
+    commitPot(selected, true);
+  });
+  ui.add.addEventListener('click', () => {
+    const list = pots[selected];
+    if (list.length >= MAX_MSGS) return;
+    const last = list[list.length - 1];
+    // Same as adding on the panel: channel 1, CC 1, full range. Keep the channel of the message above.
+    list.push({ ch: last ? last.ch : 0, cc: 1, curve: 0, min: 0, max: 127 });
+    commitPot(selected, true);
+    const inp = ui.msgs.lastElementChild && ui.msgs.lastElementChild.querySelector('[data-k="cc"]');
+    if (inp) inp.focus();
+  });
+  ui.copyTo.addEventListener('change', () => {
+    const v = ui.copyTo.value;
+    ui.copyTo.value = '';
+    if (v === '') return;
+    const targets = v === 'all' ? [...Array(N_POTS).keys()].filter(i => i !== selected) : [+v];
+    for (const t of targets) { pots[t] = clone(pots[selected]); commitPot(t, true); }
+    flash(`Copied to knob${targets.length > 1 ? 's ' + targets.map(t => t + 1).join(', ') : ' ' + (targets[0] + 1)}.`);
+  });
+
+  // ---------------- Editing: scenes and panel ----------------
+  const numBind = (id, key, lo, hi) => {
+    const el = $(id);
+    const apply = final => {
+      if (el.value === '' && !final) return;
+      const v = clamp(Math.round(+el.value) || lo, lo, hi);
+      if (final) el.value = v;
+      if (global[key] !== v) { global[key] = v; commitGlobal(); }
+    };
+    el.addEventListener('input', () => apply(false));
+    el.addEventListener('change', () => apply(true));
+  };
+  numBind('sceneCC', 'sceneCC', 0, 127);
+  numBind('sceneLen', 'customLen', 1, MAX_SCENES);
+  for (let i = 0; i < MAX_SCENES; i++) {
+    const el = $('order' + i);
+    const apply = final => {
+      if (el.value === '' && !final) return;
+      const v = clamp(Math.round(+el.value) || 1, 1, 99);
+      if (final) el.value = v;
+      if (global.order[i] !== v - 1) { global.order[i] = v - 1; commitGlobal(); }
+    };
+    el.addEventListener('input', () => apply(false));
+    el.addEventListener('change', () => apply(true));
+  }
+  const radioBind = (name, key) => document.querySelectorAll(`input[name="${name}"]`).forEach(r =>
+    r.addEventListener('change', () => { if (r.checked) { global[key] = +r.value; commitGlobal(true); } }));
+  radioBind('smode', 'sceneMode'); radioBind('theme', 'theme'); radioBind('editpot', 'editPot');
+  $('inv').addEventListener('change', e => { global.inverted = e.target.checked; commitGlobal(true); });
+
+  // ---------------- Save / undo / reset ----------------
+  ui.saveBtn.addEventListener('click', async () => {
+    flushEdits();
+    ui.saveBtn.disabled = true;
+    ui.save.className = 'save'; ui.save.textContent = 'Saving…';
+    const d = await request(msg(CMD.SAVE, 0x53, 0x41, 0x56), RPL.STATUS);
+    const s = d && decodeStatus(d);
+    if (s) { status = s; renderSave(); } else { ui.save.className = 'save pending'; ui.save.textContent = 'MC8P didn’t confirm the save. Try again.'; ui.saveBtn.disabled = false; }
+  });
+  function dropEdits() {
+    potTimers.forEach((t, i) => { clearTimeout(t); potTimers[i] = null; });
+    clearTimeout(globalTimer); globalTimer = null;
+    queue.filter(q => q.key).forEach(q => q.resolve(null));
+    queue = queue.filter(q => !q.key);
+  }
+  ui.revert.addEventListener('click', async () => {
+    dropEdits();
+    const d = await request(msg(CMD.REVERT), RPL.STATUS);
+    if (d) { editSeq = editSeq.map(x => x + 1); globalSeq++; await readAll(); flash('Back to the last saved settings.'); }
+  });
+
+  let resetArmed = null;
+  function disarmReset() { clearTimeout(resetArmed); resetArmed = null; ui.reset.classList.remove('armed'); ui.reset.textContent = 'Factory reset'; ui.resetCancel.hidden = true; }
+  ui.reset.addEventListener('click', async () => {
+    if (!resetArmed) {
+      ui.reset.classList.add('armed'); ui.reset.textContent = 'Erase all settings'; ui.resetCancel.hidden = false;
+      resetArmed = setTimeout(disarmReset, 5000);
+      return;
+    }
+    disarmReset();
+    dropEdits();
+    const d = await request(msg(CMD.RESET, 0x44, 0x45, 0x46), RPL.STATUS);
+    if (d) { editSeq = editSeq.map(x => x + 1); globalSeq++; await readAll(); flash('MC8P is back to factory settings.'); }
+  });
+  ui.resetCancel.addEventListener('click', disarmReset);
+
+  // ---------------- Backup files ----------------
+  $('btnExport').addEventListener('click', () => {
+    const data = {
+      device: 'MC8P MkII', format: 1, saved: new Date().toISOString(),
+      knobs: pots.map((list, i) => ({ knob: i + 1, messages: list.map(m => ({
+        channel: m.ch === OMNI ? 'omni' : m.ch + 1, cc: m.cc, curve: CURVES[m.curve], min: m.min, max: m.max })) })),
+      scenes: { cc: global.sceneCC, mode: global.sceneMode ? 'custom' : 'step', length: global.customLen, order: global.order.map(v => v + 1) },
+      panel: { editKnob: global.editPot + 1, theme: THEMES[global.theme], invert: global.inverted },
+    };
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+    a.download = `mc8p-settings-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+  $('btnImport').addEventListener('click', () => $('importFile').click());
+  $('importFile').addEventListener('change', async e => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    try {
+      const data = JSON.parse(await f.text());
+      if (!data || !Array.isArray(data.knobs) || data.knobs.length !== N_POTS) throw new Error('This isn’t an MC8P backup.');
+      const int = (v, lo, hi, what) => { const n = Number(v); if (!Number.isInteger(n) || n < lo || n > hi) throw new Error(`${what} is out of range.`); return n; };
+      const newPots = data.knobs.map((k, i) => {
+        if (!Array.isArray(k.messages) || k.messages.length < 1 || k.messages.length > MAX_MSGS) throw new Error(`Knob ${i + 1} needs 1 to ${MAX_MSGS} messages.`);
+        return k.messages.map(m => {
+          const curve = CURVES.indexOf(String(m.curve).toUpperCase());
+          if (curve < 0) throw new Error(`Knob ${i + 1} has an unknown curve.`);
+          const ch = String(m.channel).toLowerCase() === 'omni' ? OMNI : int(m.channel, 1, 16, `Knob ${i + 1} channel`) - 1;
+          const min = int(m.min, 0, 127, `Knob ${i + 1} min`), max = int(m.max, 0, 127, `Knob ${i + 1} max`);
+          return { ch, cc: int(m.cc, 0, 127, `Knob ${i + 1} CC`), curve, min, max: Math.max(min, max) };
+        });
+      });
+      const s = data.scenes || {}, p = data.panel || {};
+      const order = Array.isArray(s.order) && s.order.length === MAX_SCENES ? s.order.map(v => int(v, 1, 99, 'A scene') - 1) : global.order;
+      const theme = THEMES.indexOf(p.theme);
+      const newGlobal = {
+        editPot: p.editKnob != null ? int(p.editKnob, 1, 8, 'Edit knob') - 1 : global.editPot,
+        sceneCC: s.cc != null ? int(s.cc, 0, 127, 'Scene CC') : global.sceneCC,
+        sceneMode: s.mode === 'custom' ? 1 : s.mode === 'step' ? 0 : global.sceneMode,
+        customLen: s.length != null ? int(s.length, 1, MAX_SCENES, 'Custom length') : global.customLen,
+        order, theme: theme >= 0 ? theme : global.theme, inverted: p.invert != null ? !!p.invert : global.inverted,
+      };
+      pots = newPots; global = newGlobal;
+      for (let i = 0; i < N_POTS; i++) commitPot(i, true);
+      commitGlobal(true);
+      flash('Backup loaded onto MC8P. Save to keep it.');
+    } catch (err) {
+      flash('Couldn’t load that file: ' + (err.message || err), true);
+    }
+  });
+
+  // ---------------- Render ----------------
+  let flashTimer = null, flashMsg = null;
+  function flash(text, bad) { flashMsg = { text, bad }; clearTimeout(flashTimer); flashTimer = setTimeout(() => { flashMsg = null; renderSave(); }, 3500); renderSave(); }
+
+  const check = (id, on) => { const el = $(id); if (el && el.checked !== on) el.checked = on; };
+  const setVal = (el, v) => { if (document.activeElement !== el && el.value !== String(v)) el.value = v; };
+  const chText = c => c === OMNI ? 'OMNI' : 'CH' + (c + 1);
+
+  function curvePoints(m) {
+    const pts = [];
+    for (let s = 0; s <= 16; s++) {
+      const raw = s / 16 * 1023;
+      pts.push(`${(3 + s / 16 * 38).toFixed(1)},${(29 - mapValue(raw, m.min, m.max, m.curve) / 127 * 26).toFixed(1)}`);
+    }
+    return pts.join(' ');
+  }
+
+  function render() {
+    // Knob summaries
+    for (let i = 0; i < N_POTS; i++) {
+      const k = knobEls[i], list = pots[i], first = list[0];
+      k.btn.setAttribute('aria-pressed', String(i === selected));
+      k.sum.textContent = `${chText(first.ch)} CC${first.cc}${list.length > 1 ? ' +' + (list.length - 1) : ''}`;
+      k.btn.setAttribute('aria-label', `Knob ${i + 1}: ${list.length} message${list.length > 1 ? 's' : ''}, first ${chText(first.ch)} CC ${first.cc}`);
+      k.tag.hidden = global.editPot !== i;
+    }
+
+    // Selected knob's messages
+    ui.potTitle.textContent = selected + 1;
+    buildMsgRows();
+    const list = pots[selected];
+    [...ui.msgs.children].forEach((row, j) => {
+      const m = list[j];
+      const sel = row.querySelector('[data-k="ch"]'); setVal(sel, m.ch);
+      const cc = row.querySelector('[data-k="cc"]'); setVal(cc, m.cc);
+      row.querySelector('.cc-name').textContent = ccName(m.cc);
+      row.querySelectorAll('[data-k="curve"]').forEach(r => { r.checked = +r.value === m.curve; });
+      setVal(row.querySelector('[data-k="min"]'), m.min);
+      setVal(row.querySelector('[data-k="max"]'), m.max);
+      row.querySelector('.c-line').setAttribute('points', curvePoints(m));
+      row.querySelector('.del').disabled = list.length <= 1;
+    });
+    ui.add.disabled = list.length >= MAX_MSGS;
+    ui.msgCount.textContent = `${list.length} of ${MAX_MSGS}`;
+    ui.copyTo.innerHTML = '<option value="">Choose…</option>' +
+      [...Array(N_POTS).keys()].filter(i => i !== selected).map(i => `<option value="${i}">Knob ${i + 1}</option>`).join('') +
+      '<option value="all">All other knobs</option>';
+
+    // Scenes
+    setVal($('sceneCC'), global.sceneCC);
+    check('smode0', global.sceneMode === 0); check('smode1', global.sceneMode === 1);
+    $('modeHint').textContent = global.sceneMode
+      ? `PREV and NEXT step through your list of ${global.customLen} scene${global.customLen > 1 ? 's' : ''}.`
+      : 'PREV and NEXT go one scene down or up, 1 to 99.';
+    $('rowLen').hidden = $('rowOrder').hidden = global.sceneMode !== 1;
+    setVal($('sceneLen'), global.customLen);
+    for (let i = 0; i < MAX_SCENES; i++) {
+      const el = $('order' + i);
+      setVal(el, global.order[i] + 1);
+      el.disabled = i >= global.customLen;
+      el.parentElement.hidden = i >= global.customLen;
+    }
+
+    // Panel
+    check('editpot' + global.editPot, true);
+    check('theme' + global.theme, true);
+    $('inv').checked = global.inverted;
+    $('invText').textContent = global.inverted ? 'On' : 'Off';
+    $('invHint').textContent = global.inverted ? 'On: light graphics on a black screen.' : 'Off: dark graphics on a lit screen.';
+
+    renderLive();
+    renderSave();
+  }
+
+  function renderLive() {
+    const raw = status ? status.raw : null;
+    for (let i = 0; i < N_POTS; i++) {
+      const k = knobEls[i], r = raw ? raw[i] : 0, f = r / 1023;
+      k.arc.setAttribute('stroke-dasharray', `${(ARC_LEN * f).toFixed(1)} 999`);
+      k.tick.setAttribute('transform', `rotate(${(-135 + 270 * f).toFixed(1)} 32 32)`);
+      k.arc.style.opacity = raw ? 1 : 0;
+    }
+    const list = pots[selected];
+    [...ui.msgs.children].forEach((row, j) => {
+      const m = list[j], dot = row.querySelector('.c-dot'), val = row.querySelector('.out-val');
+      if (!raw || !m) { dot.style.display = 'none'; val.textContent = '–'; return; }
+      const v = mapValue(raw[selected], m.min, m.max, m.curve);
+      dot.style.display = '';
+      dot.setAttribute('cx', (3 + raw[selected] / 1023 * 38).toFixed(1));
+      dot.setAttribute('cy', (29 - v / 127 * 26).toFixed(1));
+      val.textContent = v;
+    });
+
+    // Panel state
+    let state = '';
+    if (status) {
+      const g = global;
+      state = g.sceneMode ? `Scene ${status.scene + 1} (step ${status.scenePos + 1} of ${g.customLen})` : `Scene ${status.scene + 1}`;
+      if (status.override) state += ' · ENTER held: temporary values';
+    }
+    ui.panelState.textContent = state;
+    ui.panelHint.textContent = link && link.kind === 'demo' ? 'Pick a knob to edit it. Drag up or down to turn it.' : 'Pick a knob to edit what it sends.';
+    const inMenu = status && status.inMenu;
+    ui.menuCallout.hidden = !inMenu;
+    if (inMenu) ui.menuCallout.textContent = `MC8P’s panel is on the ${SCREENS[status.screen] || 'menu'}. Changes from here still apply, but the knobs only send MIDI from the main screen.`;
+  }
+
+  function renderSave() {
+    const connected = !!link && loaded;
+    const unsaved = connected && status && (status.midiUnsaved || status.globalUnsaved);
+    const sending = connected && editsWaiting();
+    ui.saveBtn.disabled = !connected || !(unsaved || sending);
+    ui.revert.disabled = !connected || !unsaved;
+    if (flashMsg) { ui.save.className = 'save ' + (flashMsg.bad ? 'pending' : 'ok'); ui.save.textContent = flashMsg.text; return; }
+    if (!link) { ui.save.className = 'save'; ui.save.textContent = 'Connect to see MC8P’s settings.'; return; }
+    if (!loaded || !status) return;
+    if (unsaved) {
+      ui.save.className = 'save pending';
+      ui.save.textContent = 'Changes are live on MC8P but not saved. They’re lost when it’s switched off.';
+    } else { ui.save.className = 'save ok'; ui.save.textContent = 'Saved on MC8P'; }
+  }
+
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && link && loaded) readAll(); });
+  render();
+})();
+</script>
+
+</body>
+</html>
